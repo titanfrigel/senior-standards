@@ -1,0 +1,15 @@
+{
+  "name": "senior-standards",
+  "displayName": "Senior Standards",
+  "version": "0.1.0",
+  "description": "Senior-engineer process rules for Claude Code: decision gates before dependencies and services, ADRs, and a dependency guard.",
+  "author": {
+    "name": "titanfrigel",
+    "email": "titanfrigel@gmail.com"
+  },
+  "license": "MIT",
+  "keywords": ["standards", "adr", "dependencies", "architecture", "guard"],
+  "experimental": {
+    "evals": "tests/evals"
+  }
+}

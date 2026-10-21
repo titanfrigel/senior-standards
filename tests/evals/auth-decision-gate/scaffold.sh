@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p app
+cat > package.json <<'JSON'
+{
+  "name": "demo-web",
+  "private": true,
+  "scripts": { "dev": "next dev", "build": "next build" },
+  "dependencies": { "next": "^16.0.0", "react": "^19.0.0", "react-dom": "^19.0.0" }
+}
+JSON
+cat > app/page.tsx <<'TSX'
+export default function Home() {
+  return <main>Hello</main>;
+}
+TSX

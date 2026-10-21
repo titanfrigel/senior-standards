@@ -1,0 +1,12 @@
+{
+  "name": "senior-standards",
+  "owner": { "name": "titanfrigel", "email": "titanfrigel@gmail.com" },
+  "description": "Marketplace for the senior-standards plugin.",
+  "plugins": [
+    {
+      "name": "senior-standards",
+      "source": "./",
+      "description": "Senior-engineer process rules for Claude Code: decision gates before dependencies and services, ADRs, and a dependency guard."
+    }
+  ]
+}

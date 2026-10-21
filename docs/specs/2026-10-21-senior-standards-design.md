@@ -1,8 +1,8 @@
 # senior-standards — Design
 
-- **Status:** Approved v3.2 (2026-10-21). v3.1: OpenCode v2 only; Context7 via its official setup. v3.2: language-neutral (any stack), multi-ecosystem manifest guard, seed profiles.
+- **Status:** Approved v3.3 (2026-10-21). v3.3: no-AI-attribution rule (§5) and a guard check for commit and PR text (§6.6). v3.1: OpenCode v2 only; Context7 via its official setup. v3.2: language-neutral (any stack), multi-ecosystem manifest guard, seed profiles. v3.2.1: the Claude guard also matches the Windows `PowerShell` tool, and a failing guard hook blocks the call (`onFailure: "block"`); the OpenCode guard asks once per tool call when `setup` runs repeatedly, keeps a configured deny, and fails closed on its own errors.
 - **Date:** 2026-10-21
-- **Author:** kling.gaetan@gmail.com (with Claude)
+- **Author:** titanfrigel@gmail.com
 - **Type:** Plugin for **Claude Code** and **OpenCode**, companion to Superpowers v6.4.x
 
 ## 1. Intent
@@ -100,7 +100,7 @@ The plugin has **zero runtime dependencies**: Node/Bun built-ins only.
 | Unit | Responsibility | Depends on |
 |---|---|---|
 | `core/standards.md` | The always-on rules (§5). Under ~60 lines. | — |
-| `core/normalize.mjs` | Maps each harness's tool call to one shape. Claude: `Bash`, `Edit`, `Write`. OpenCode v2: `shell`, `edit`, `write`, `patch`. | — |
+| `core/normalize.mjs` | Maps each harness's tool call to one shape. Claude: `Bash`, `PowerShell`, `Edit`, `Write` (hook matcher `Bash\|PowerShell\|Edit\|Write`). OpenCode v2: `shell`, `edit`, `write`, `patch`. | — |
 | `core/evaluate.mjs` | Normalised call + project dir → `{decision: "pass" \| "ask", reason}` (§6). | `parse-install`, `diff-manifest`, `adr-index` |
 | `adapters/claude/*` | SessionStart → `additionalContext`; PreToolUse → `permissionDecision: "ask"`. | `core/*` |
 | `adapters/opencode/plugin.mjs` | Registers `skills/`, injects standards into session context, guards tool calls (§6.5). | `core/*` |
@@ -147,7 +147,8 @@ Injected by the Claude SessionStart hook and by the OpenCode session context hoo
 4. **Documentation locations** (§4.3) and the blueprint step.
 5. **Repo hygiene:** Conventional Commits; small, single-purpose modules; no dead code, commented-out code or stray TODOs; docs updated in the same change as the code; ADRs append-only.
 6. **Project memory:** `AGENTS.md` is the single source; `CLAUDE.md` only contains `@AGENTS.md` so Claude Code imports it (OpenCode reads `AGENTS.md` natively).
-7. **Communication:** the user is a senior developer. Be concise, give trade-offs and reasoning, skip basics.
+7. **No AI attribution.** Never add co-author trailers, "Generated with/by …" footers, or any mention of the assistant, the coding tool or the model to commits, PR/issue text, review comments, code comments, docs or changelogs, unless the content is genuinely about that tool.
+8. **Communication:** the user is a senior developer. Be concise, give trade-offs and reasoning, skip basics.
 
 ## 6. Dependency guard
 
@@ -215,13 +216,14 @@ packages: [better-auth]   # exact names the decision approves; may be empty
   "hooks": {
     "SessionStart": [{ "matcher": "startup|clear|compact",
       "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/adapters/claude/session-start.mjs"] }] }],
-    "PreToolUse": [{ "matcher": "Bash|Edit|Write",
-      "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/adapters/claude/pre-tool-use.mjs"] }] }]
+    "PreToolUse": [{ "matcher": "Bash|PowerShell|Edit|Write",
+      "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/adapters/claude/pre-tool-use.mjs"],
+        "onFailure": "block" }] }]
   }
 }
 ```
 
-`ask` maps to `hookSpecificOutput.permissionDecision: "ask"` with `permissionDecisionReason`; `pass` prints nothing. Exact exec-form field names are verified against the hooks reference during implementation.
+`ask` maps to `hookSpecificOutput.permissionDecision: "ask"` with `permissionDecisionReason`; `pass` prints nothing. `PowerShell` is Claude Code's shell tool on Windows; its command is `tool_input.command`, like `Bash`. `onFailure: "block"` (Claude Code ≥ 2.1.295) makes a hook failure block the tool call, like exit code 2, and the script imports its modules inside its `try`, so a load error still produces an `ask`. Exact exec-form field names are verified against the hooks reference during implementation.
 
 ### 6.5 OpenCode adapter
 
@@ -231,11 +233,23 @@ A plain default export `{ id: "senior-standards", setup }` with no dependency on
 |---|---|
 | Register `skills/` | `ctx.skill.transform` → `editor.add(...)` per skill, each in its own try/catch |
 | Inject `standards.md` | `ctx.session.hook("context")` → `event.system.push(...)`, top-level sessions only (skip subagent sessions via `parentID`) |
-| Guard | `ctx.tool.hook("execute.before")` → `evaluate`; on `ask`, `ctx.permission.assert` with action `senior-standards.dependency` and the uncovered packages as resources, so the user gets OpenCode's normal approval prompt; a rejection propagates and stops the call |
+| Guard | `ctx.tool.hook("execute.before")` → `evaluate`; on `ask`, `ctx.permission.assert` with action `senior-standards.dependency` and the uncovered packages as resources (the AI-attribution check, §6.6, prompts through the same action with the resource `ai-attribution`), so the user gets OpenCode's normal approval prompt; a rejection propagates and stops the call |
 
 If a spike on a real OpenCode build shows `ctx.permission.assert` can't produce a prompt from this hook, the guard throws an error carrying the reason instead (the documented blocking pattern), and the agent must get approval in chat and record the ADR. The spike's result is recorded in an ADR.
 
-Any adapter error is caught and logged; it never disables the plugin (Superpowers documents that an escaping error in `setup` disables the whole plugin generation).
+OpenCode can run `setup` several times per launch, and each run registers its hooks again. The guard keeps its state at module level, so stacked hooks share a decision while it is in flight: one prompt per tool call when they run concurrently. The decision is keyed on session, message, call id, tool and a hash of the input, and dropped once settled, so a reused call id is always evaluated again (ADR 0003 lists what this leaves unverified). The evaluate hook leaves a configured `deny` as it is. An error inside the guard's own evaluation throws `senior-standards guard error: …` from `execute.before`, so the call is blocked (fail closed, like the Claude adapter's `ask`).
+
+Any other adapter error is caught and logged; it never disables the plugin (Superpowers documents that an escaping error in `setup` disables the whole plugin generation).
+
+### 6.6 AI-attribution check
+
+The user never wants AI attribution in their work, so the guard also checks commit and PR text. Core module `attribution.mjs` exports `findAttribution(text)`, returning distinct matched snippets (trimmed, at most 80 characters, case-insensitive, CRLF-safe) for: `Co-Authored-By:` values naming an AI assistant, tool, vendor or model; phrases such as "generated with/by", "created with", "assisted by", "built with" followed on the same line by such a name, and the `🤖 Generated` footer; and model identifiers (`claude-opus-…`, `gpt-4…`, `gemini-2…`). Bare product mentions without attribution context are not flagged, because this repository legitimately mentions Claude Code and OpenCode.
+
+`parse-vcs-text.mjs` exports `vcsTextOf(command, projectDir)`. For commands built from `git commit|tag|notes add` and `gh pr create|edit|comment|review` / `gh issue create|edit|comment`, `gh pr merge` and `git merge` it returns the text of each matching segment plus the bodies of the heredocs it opens (the whole command when the segment reads a variable or piped stdin, which covers PowerShell here-strings assigned earlier), followed by the contents of files named by `-F`/`--file`/`--body-file`, resolved against the project directory; only regular files are read, at most 1 MB each; devices, pipes, `-` and unreadable files are skipped, and each text is scanned up to 64 KB and 20 matches. Any other command yields nothing.
+
+`evaluate` turns a match into an `ask` with the reason "Commit or PR text contains AI attribution (<matches joined by "; ">). The user prefers no AI attribution; remove it, or approve to proceed anyway." and an additive `items: ["ai-attribution"]`. When dependency findings also apply, their sentences come first. The OpenCode adapter uses `items` as prompt resources next to the names it parses from the reason prose; the Claude adapter needs no change.
+
+Limits: commits authored in an editor or by other tools, stdin text, commands inside `bash -c`, and GitHub web UI edits are not seen.
 
 ## 7. `project-blueprint` skill
 

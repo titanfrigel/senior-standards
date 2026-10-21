@@ -24,7 +24,7 @@
 - Plugin name `senior-standards`; marketplace name `senior-standards`; OpenCode plugin id `senior-standards`.
 - OpenCode target: v2 ≥ 2.0.29 only (A5).
 - Language-neutral: no skill, template or core module may assume a specific language or package manager; stack knowledge lives only in `skills/repo-standards/profiles/` and in `core/manifests/` + the `parse-install` rule table (A2, §10).
-- Conventional Commits for every commit; each commit message ends with the `Co-Authored-By` trailer the session requires.
+- Conventional Commits for every commit; Commit messages carry no attribution trailers or footers.
 - Docs locations: specs `docs/specs/`, plans `docs/plans/`, ADRs `docs/adr/NNNN-kebab-title.md`.
 
 ## Review Focus
@@ -62,7 +62,7 @@ Record the answers in `docs/adr/0002-plugin-repo-tooling.md` with `status: accep
 - `ci.yml`: matrix `ubuntu-latest`, `windows-latest`; `permissions: contents: read`; actions pinned by full SHA; runs `npm run check` (or `pnpm check`). Add `claude plugin validate . --strict` in Task 7 once manifests exist.
 - `renovate.json`: `minimumReleaseAge: "3 days"`, pin Action digests, group dev dependencies (D1).
 - `pull_request_template.md`: links to spec/plan/ADR, "docs updated" checkbox (R2).
-- `SECURITY.md`: private reporting contact `kling.gaetan@gmail.com`.
+- `SECURITY.md`: private reporting contact `titanfrigel@gmail.com`.
 
 - [ ] **Step 4: Verify**
 
