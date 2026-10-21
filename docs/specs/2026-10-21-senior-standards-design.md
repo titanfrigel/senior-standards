@@ -1,6 +1,6 @@
 # senior-standards — Design
 
-- **Status:** Draft v3, awaiting review (v2 decisions accepted 2026-10-21; v3 adds OpenCode support)
+- **Status:** Approved v3.1 (2026-10-21). v3.1: OpenCode v2 only; Context7 installed through its official setup instead of bundled.
 - **Date:** 2026-10-21
 - **Author:** kling.gaetan@gmail.com (with Claude)
 - **Type:** Plugin for **Claude Code** and **OpenCode**, companion to Superpowers v6.4.x
@@ -20,7 +20,7 @@
 - **A2.** The primary stack is TypeScript/Node. Other ecosystems get the decision gate and the install guard, but no repo-standards profile in v1.
 - **A3.** The user works on Windows. All plugin code runs cross-platform on Node built-ins (Claude Code hooks run under Node; OpenCode plugins run under Bun, which supports the same built-ins).
 - **A4.** "Always ask" applies to direct runtime and dev dependencies, external services, databases, hosting and paid APIs. It does not apply to transitive dependencies or to reinstalling from an existing lockfile.
-- **A5.** OpenCode **v2** (≥ 2.0.29, where `setup(ctx)` exposes tool hooks) is the primary OpenCode target. OpenCode v1 is supported best-effort, the way Superpowers does it: same features, with a weaker guard (§6.5).
+- **A5.** OpenCode **v2 only** (≥ 2.0.29, where `setup(ctx)` exposes tool hooks). OpenCode v1 is not supported.
 
 ### Success criteria
 1. On a new project, no product code or install happens before `requirements.md`, `architecture/overview.md` and the ADRs for every stack choice exist and the user has approved them.
@@ -57,7 +57,6 @@ senior-standards/                      # private GitHub repo
 ├── .claude-plugin/
 │   ├── marketplace.json               # Claude marketplace: one entry → ./ (this repo)
 │   └── plugin.json                    # Claude plugin manifest
-├── .mcp.json                          # Claude: Context7 (§16.1)
 ├── hooks/
 │   └── hooks.json                     # Claude adapter registration
 ├── adapters/
@@ -65,7 +64,7 @@ senior-standards/                      # private GitHub repo
 │   │   ├── session-start.mjs          # emits standards as additionalContext
 │   │   └── pre-tool-use.mjs           # stdin JSON → core.evaluate → hook JSON
 │   └── opencode/
-│       └── plugin.mjs                 # v2 {id, setup} + v1 named export
+│       └── plugin.mjs                 # OpenCode v2 default export {id, setup}
 ├── index.js                           # OpenCode package entry → adapters/opencode/plugin.mjs
 ├── package.json                       # name, version, type: module, exports; zero dependencies
 ├── core/                              # pure, harness-agnostic, unit-tested
@@ -91,7 +90,7 @@ senior-standards/                      # private GitHub repo
 └── .github/workflows/ci.yml
 ```
 
-Placing the Claude manifest at the repo root (marketplace entry `source: "./"`) lets one directory serve both harnesses: Claude reads `.claude-plugin/`, `skills/`, `hooks/`, `.mcp.json`; OpenCode reads `package.json` → `index.js`. Neither harness loads the other's files.
+Placing the Claude manifest at the repo root (marketplace entry `source: "./"`) lets one directory serve both harnesses: Claude reads `.claude-plugin/`, `skills/`, `hooks/`; OpenCode reads `package.json` → `index.js`. Neither harness loads the other's files.
 
 The plugin has **zero runtime dependencies**: Node/Bun built-ins only.
 
@@ -100,10 +99,10 @@ The plugin has **zero runtime dependencies**: Node/Bun built-ins only.
 | Unit | Responsibility | Depends on |
 |---|---|---|
 | `core/standards.md` | The always-on rules (§5). Under ~60 lines. | — |
-| `core/normalize.mjs` | Maps each harness's tool call to one shape. Claude: `Bash`, `Edit`, `Write`. OpenCode v1: `bash`, `edit`, `write`, `apply_patch`. OpenCode v2: `shell`, `edit`, `write`, `patch`. | — |
+| `core/normalize.mjs` | Maps each harness's tool call to one shape. Claude: `Bash`, `Edit`, `Write`. OpenCode v2: `shell`, `edit`, `write`, `patch`. | — |
 | `core/evaluate.mjs` | Normalised call + project dir → `{decision: "pass" \| "ask", reason}` (§6). | `parse-install`, `diff-manifest`, `adr-index` |
 | `adapters/claude/*` | SessionStart → `additionalContext`; PreToolUse → `permissionDecision: "ask"`. | `core/*` |
-| `adapters/opencode/plugin.mjs` | Registers `skills/`, injects standards into session context, guards tool calls, adds the Context7 MCP server. Dual v1/v2 like Superpowers (§6.5). | `core/*` |
+| `adapters/opencode/plugin.mjs` | Registers `skills/`, injects standards into session context, guards tool calls (§6.5). | `core/*` |
 | `project-blueprint` | Produces the project documentation set (§7). | `decision-gate` |
 | `decision-gate` | Comparison → recommendation → user choice → ADR (§8). | — |
 | `official-integration` | Official docs lookup, official install, vendor MCP/skills proposal for each harness (§9). | — |
@@ -168,7 +167,7 @@ Not gated: lockfile installs with no package arguments (`npm install`, `pnpm ins
 
 **File edits:**
 - `package.json` via Write/Edit: rebuild the post-edit file, diff the four dependency sections, gate added names.
-- `package.json` via a patch tool (OpenCode `apply_patch`/`patch`): patches can't be rebuilt reliably, so any patch touching `package.json` dependency sections → `ask`.
+- `package.json` via a patch tool (OpenCode `patch`): patches can't be rebuilt reliably, so any patch touching `package.json` dependency sections → `ask`.
 - Other manifests (`pyproject.toml`, `Cargo.toml`, `go.mod`…): `ask` whenever an edit touches them.
 
 ### 6.2 Approval source
@@ -207,16 +206,15 @@ packages: [better-auth]   # exact names the decision approves; may be empty
 
 ### 6.5 OpenCode adapter
 
-One module, two exports, following Superpowers' tested pattern:
+A plain default export `{ id: "senior-standards", setup }` with no dependency on `@opencode/plugin` (Superpowers ships the same shape and loads on v2):
 
-| Capability | OpenCode v2 (`default: { id, setup }`) | OpenCode v1 (named export) |
-|---|---|---|
-| Register `skills/` | `ctx.skill.transform` → `draft.add(...)` per skill, each in its own try/catch | `config` hook → append to `config.skills.paths` |
-| Inject `standards.md` | `ctx.session.hook("context")`, top-level sessions only (skip subagent sessions via `parentID`) | `experimental.chat.messages.transform` |
-| Guard | `ctx.tool.hook("execute.before")` → `evaluate`; on `ask`, `ctx.permission.assert` with an `ask` rule so the user gets the normal approval prompt | `tool.execute.before` → `evaluate`; on `ask`, **throw** with the reason (v1 has no plugin-level ask), so the call is refused and Claude must get approval in chat and record the ADR |
-| Context7 MCP | `ctx.mcp` transform → `editor.set("context7", { type: "remote", url })` | `config` hook → add to `config.mcp` |
+| Capability | OpenCode v2 |
+|---|---|
+| Register `skills/` | `ctx.skill.transform` → `editor.add(...)` per skill, each in its own try/catch |
+| Inject `standards.md` | `ctx.session.hook("context")` → `event.system.push(...)`, top-level sessions only (skip subagent sessions via `parentID`) |
+| Guard | `ctx.tool.hook("execute.before")` → `evaluate`; on `ask`, `ctx.permission.assert` with action `senior-standards.dependency` and the uncovered packages as resources, so the user gets OpenCode's normal approval prompt; a rejection propagates and stops the call |
 
-If `ctx.permission.assert` turns out not to support plugin-initiated prompts on a given v2 build, the v2 adapter falls back to the v1 behaviour (throw). This is decided by a contract test, not at runtime guesswork.
+If a spike on a real OpenCode build shows `ctx.permission.assert` can't produce a prompt from this hook, the guard throws an error carrying the reason instead (the documented blocking pattern), and the agent must get approval in chat and record the ADR. The spike's result is recorded in an ADR.
 
 Any adapter error is caught and logged; it never disables the plugin (Superpowers documents that an escaping error in `setup` disables the whole plugin generation).
 
@@ -294,7 +292,7 @@ One bundled decision, one ADR. Accepted defaults (2026-10-21), re-checked agains
 Plus every **core** practice in §15. Architecture style (feature-sliced, layered, hexagonal) is chosen in `project-blueprint`, not here.
 
 ## 11. Error handling
-- Adapters never throw into the host except the deliberate v1 guard throw (§6.5). All other errors become `ask` (guard) or a logged warning (context injection, skill registration, MCP registration).
+- Adapters never throw into the host except the guard fallback throw (§6.5). All other errors become `ask` (guard) or a logged warning (context injection, skill registration).
 - If `standards.md` is unreadable, inject a one-line warning instead of failing the session.
 - Skills: if official docs can't be reached, say so and stop before installing.
 
@@ -302,14 +300,14 @@ Plus every **core** practice in §15. Architecture style (feature-sliced, layere
 - **Core unit tests (node:test, no deps):** `parse-install` (chains, flags, versions, scoped packages, lockfile-only installs), `normalize` (every tool name and arg shape per harness/version), `diff-manifest`, `adr-index`, `evaluate`.
 - **Adapter contract tests:**
   - Claude: run each hook script with fixture stdin, assert the exact JSON.
-  - OpenCode: load `plugin.mjs` with fake v1 and v2 host contexts (as Superpowers' own tests do); assert skills registered, context injected only in top-level sessions, guard decisions, MCP registration, and that no error escapes `setup`.
+  - OpenCode: load `plugin.mjs` with a fake v2 host context (as Superpowers' own tests do); assert skills registered, context injected only in top-level sessions, guard decisions, and that no error escapes `setup`.
 - **Skill format check:** every `SKILL.md` passes both harnesses' frontmatter rules (§4.4).
 - **Validation:** `claude plugin validate . --strict` in CI.
 - **Evals (P3):** `claude plugin eval` cases for the scenario below. OpenCode has no equivalent runner; the same scenario is a documented manual check there.
 - **Scenario,** in a throwaway "Next.js app with auth" project, in each harness:
   1. Blueprint docs produced before any code.
   2. Auth goes through the decision gate with Better Auth compared; ADR written.
-  3. `pnpm add better-auth` passes after the ADR; `pnpm add lodash` prompts (Claude, OpenCode v2) or is refused (OpenCode v1).
+  3. `pnpm add better-auth` passes after the ADR; `pnpm add lodash` prompts (or is refused, if the §6.5 fallback applies).
   4. Better Auth MCP server and skills proposed for both harnesses, not silently added.
 
 CI matrix: Node LTS on `ubuntu-latest` and `windows-latest` (the user's platform).
@@ -329,12 +327,12 @@ Private repos work through the user's existing Git credentials.
 ```json
 { "plugins": ["senior-standards@git+https://github.com/<owner>/senior-standards.git#vX.Y.Z"] }
 ```
-OpenCode v1 uses the `plugin` key with the same value. On Windows, OpenCode's Bun-based git installs can fail (documented by Superpowers); the documented fallback is `npm install <spec> --prefix ~/.config/opencode` and an absolute path in `plugins`. For a private repo, Bun/npm need Git credentials (SSH or a credential helper); the README covers both.
+On Windows, OpenCode's Bun-based git installs can fail (documented by Superpowers); the documented fallback is `npm install <spec> --prefix ~/.config/opencode` and an absolute path in `plugins`. For a private repo, Bun/npm need Git credentials (SSH or a credential helper); the README covers both.
 
 Superpowers is a stated requirement in the README, not a declared dependency, because it comes from different marketplaces in each harness.
 
 ## 14. Review decisions (2026-10-21)
-1. Context7 bundled as the third documentation source (§16.1).
+1. Context7 used as the third documentation source (§16.1); v3.1: installed with its official setup, not bundled.
 2. Name `senior-standards` confirmed.
 3. Private GitHub repository.
 4. pnpm and Biome as defaults (§16.2–16.3).
@@ -414,7 +412,7 @@ The plugin repository applies the same practices to itself where they fit (V1, V
 ## 16. Assessments (accepted)
 
 ### 16.1 Context7 MCP
-Free plan: 1,000 calls/month, then 20 bonus calls a day; Pro $10/seat/month. Public library docs only; read-only; no project code sent. Adds version-specific docs for libraries without their own docs MCP or `llms.txt`; secondary to a vendor's own server. Bundled in both harnesses (Claude `.mcp.json`, OpenCode MCP transform/config hook). The remote URL and auth method are verified against Context7's docs during implementation.
+Free plan: 1,000 calls/month, then 20 bonus calls a day; Pro $10/seat/month. Public library docs only; read-only; no project code sent. Adds version-specific docs for libraries without their own docs MCP or `llms.txt`; secondary to a vendor's own server. v3.1: not bundled. Context7's official installer, `npx ctx7 setup` with `--claude` or `--opencode`, authenticates with OAuth, generates the API key, configures the remote server (`https://mcp.context7.com/mcp`) and installs Context7's own skill. Bundling would mean re-implementing that and handling the key ourselves, against the "official installation" rule. The README lists it as a recommended setup step; `official-integration` uses it when present.
 
 ### 16.2 Biome vs ESLint + Prettier
 | Criterion | Biome 2 | ESLint + typescript-eslint + Prettier |
@@ -440,12 +438,12 @@ Decision: pnpm. npm/Bun security cells come from secondary sources and are re-ch
 
 ## 17. Harness compatibility summary
 
-| Feature | Claude Code | OpenCode v2 | OpenCode v1 |
-|---|---|---|---|
-| Skills | Native plugin `skills/` | Registered by the plugin | Registered via `skills.paths` |
-| Always-on standards | SessionStart hook | Session `context` hook | Message transform |
-| Dependency guard | Prompt (`ask`) | Prompt via permission assert, or refusal fallback | Refusal with reason |
-| Context7 | Plugin `.mcp.json` | MCP transform | Config hook |
-| Project MCP/skills written by `official-integration` | `.mcp.json`, `.claude/skills/` | `opencode.json` `mcp`, `.claude/skills/` | same as v2 |
-| Project memory | `CLAUDE.md` → `@AGENTS.md` | `AGENTS.md` | `AGENTS.md` |
-| Evals | `claude plugin eval` | Manual scenario | Manual scenario |
+| Feature | Claude Code | OpenCode v2 |
+|---|---|---|
+| Skills | Native plugin `skills/` | Registered by the plugin |
+| Always-on standards | SessionStart hook | Session `context` hook |
+| Dependency guard | Prompt (`ask`) | Prompt via permission assert, or refusal fallback |
+| Context7 | `npx ctx7 setup --claude` | `npx ctx7 setup --opencode` |
+| Project MCP/skills written by `official-integration` | `.mcp.json`, `.claude/skills/` | `opencode.json` `mcp`, `.claude/skills/` |
+| Project memory | `CLAUDE.md` → `@AGENTS.md` | `AGENTS.md` |
+| Evals | `claude plugin eval` | Manual scenario |
