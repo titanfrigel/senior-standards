@@ -8,7 +8,7 @@
 
 **Tech Stack:** Node ≥ 22 built-ins only at runtime (`node:fs`, `node:path`, `node:test`, `node:assert`); OpenCode runs the same modules under Bun. Markdown skills (Agent Skills format). GitHub Actions.
 
-**Spec:** `docs/specs/2026-10-21-senior-standards-design.md` (v3.1). Section references below (§n) point into it.
+**Spec:** `docs/specs/2026-10-21-senior-standards-design.md` (v3.2). Section references below (§n) point into it.
 
 ## Global Constraints
 
@@ -23,16 +23,17 @@
 - ADR frontmatter keys exactly: `status` (`proposed|accepted|superseded|rejected`), `date`, `packages` (§6.2).
 - Plugin name `senior-standards`; marketplace name `senior-standards`; OpenCode plugin id `senior-standards`.
 - OpenCode target: v2 ≥ 2.0.29 only (A5).
+- Language-neutral: no skill, template or core module may assume a specific language or package manager; stack knowledge lives only in `skills/repo-standards/profiles/` and in `core/manifests/` + the `parse-install` rule table (A2, §10).
 - Conventional Commits for every commit; each commit message ends with the `Co-Authored-By` trailer the session requires.
 - Docs locations: specs `docs/specs/`, plans `docs/plans/`, ADRs `docs/adr/NNNN-kebab-title.md`.
 
 ## Review Focus
 
 1. **Windows-shaped input.** `file_path` like `C:\proj\web\package.json` or `web/package.json`, CRLF in ADR files and `package.json`, a UTF-8 BOM on stdin. Expected: detected and parsed exactly like POSIX/LF input. Tests in Tasks 2, 3, 6.
-2. **Real-world install commands.** `cd web && pnpm add zod`, `FOO=1 npm i -D vitest`, `pnpm --filter web add zod`, `npm install --save-exact zod@3.23.8`, `pnpm add -D @types/node@^22`, `pip install "requests[socks]>=2"`. Expected: the right package names, nothing else. Tests in Task 1.
-3. **Non-registry specs.** `pnpm add ./packages/ui`, `npm i github:user/repo`, `workspace:*` in a `package.json` diff. Expected: local paths and `workspace:` are internal and pass; git/URL/tarball specs are external and `ask`, named by the spec itself. Tests in Tasks 1 and 3.
+2. **Real-world install commands in every ecosystem.** `cd web && pnpm add zod`, `FOO=1 npm i -D vitest`, `pnpm --filter web add zod`, `dotnet add src/Api/Api.csproj package Npgsql`, `cargo add tokio@1 -F full --dev`, `poetry add httpx --group dev`, `go install …@latest`. Expected: the right names and kind (dependency vs tool), nothing else. Tests in Task 1.
+3. **Internal vs external references.** `pnpm add ./packages/ui`, `workspace:*`, Cargo `path =`, `ProjectReference`, `cargo add --git …`, `npm i github:user/repo`. Expected: internal references pass; git/URL sources `ask`, named by their source. Tests in Tasks 1 and 3.
 4. **Missing or broken ADR log.** No `docs/adr/`, an ADR without frontmatter, `packages:` as a block list, an unreadable file. Expected: no crash; only well-formed `accepted` ADRs approve anything; broken files are reported in the reason. Tests in Task 2.
-5. **First write of `package.json` and invalid JSON mid-edit.** Expected: on a new file every dependency counts as added; unparseable JSON → `ask` with "could not parse package.json". Tests in Tasks 3 and 5.
+5. **Non-dependency edits to manifests.** Changing `TargetFramework` in a `.csproj`, a version bump in `Cargo.toml`, reordering `package.json`, and a first write of a manifest. Expected: only newly added names prompt (a new file counts everything); unparseable content → `ask` with "could not parse <file>". Tests in Tasks 3 and 5.
 
 ---
 
@@ -80,38 +81,48 @@ Run: `npm run check` → Expected: the tooling part passes; `node --test` report
 **Interfaces:**
 - Produces:
   - `splitCommand(command: string): string[]` — splits on `&&`, `||`, `;`, `|`, newlines, outside quotes; trims; drops empties.
-  - `parseInstall(command: string): Array<{ manager: string, packages: string[], external: string[] }>` — one entry per segment that adds dependencies. `packages` are registry names with version specifiers removed; `external` are git/URL/tarball specs kept verbatim. Local paths (`./`, `../`, absolute, `file:`, `link:`, `workspace:`) are dropped.
+  - `parseInstall(command: string): Array<{ manager: string, kind: "dependency" | "tool", packages: string[], external: string[] }>` — one entry per segment that adds something (§6.1). `packages` are registry names with version specifiers removed; `external` are git/URL/tarball specs kept verbatim. Local paths (`./`, `../`, absolute, `file:`, `link:`, `workspace:`) are dropped. `kind: "tool"` for global/tool installs.
 
 - [ ] **Step 1: Write the failing tests**
 
-Table-driven `test("parseInstall: <command>")` cases, asserting `deepStrictEqual` on the result:
+Table-driven `test("parseInstall: <command>")` cases asserting `deepStrictEqual`. Shorthand below: `manager kind [packages] {external}`; `—` means `[]`.
 
 | Command | Expected |
 |---|---|
-| `npm install zod` | `[{manager:"npm", packages:["zod"], external:[]}]` |
-| `npm i -D vitest @types/node@^22` | npm, `["vitest","@types/node"]` |
-| `npm install --save-exact zod@3.23.8` | npm, `["zod"]` |
-| `pnpm add -D @biomejs/biome` | pnpm, `["@biomejs/biome"]` |
-| `pnpm --filter web add zod` | pnpm, `["zod"]` |
-| `yarn add react react-dom` | yarn, `["react","react-dom"]` |
-| `bun add hono` | bun, `["hono"]` |
-| `cd web && pnpm add zod` | pnpm, `["zod"]` |
-| `FOO=1 npm i -D vitest` | npm, `["vitest"]` |
-| `pip install "requests[socks]>=2" flask==3.0` | pip, `["requests","flask"]` |
-| `pip install -r requirements.txt` | `[]` |
-| `pip install -e .` | `[]` |
-| `uv add httpx` / `poetry add httpx` | uv / poetry, `["httpx"]` |
-| `cargo add serde --features derive` | cargo, `["serde"]` |
-| `go get github.com/gin-gonic/gin@v1.10.0` | go, `["github.com/gin-gonic/gin"]` |
-| `composer require laravel/sanctum` | composer, `["laravel/sanctum"]` |
-| `dotnet add package Serilog --version 4.0.0` | dotnet, `["Serilog"]` |
-| `npm i github:user/repo` | npm, `[]`, external `["github:user/repo"]` |
-| `pnpm add ./packages/ui` | `[]` |
-| `npm install` / `pnpm install` / `npm ci` / `pnpm i --frozen-lockfile` | `[]` |
-| `npx create-next-app@latest` / `pnpm dlx x` / `bunx x` | `[]` |
-| `npm uninstall zod` / `pnpm remove zod` | `[]` |
-| `echo "npm install zod"` | `[]` |
-| `npm install zod; yarn add lodash` | two entries, npm `["zod"]`, yarn `["lodash"]` |
+| `npm install zod` | `npm dependency [zod]` |
+| `npm i -D vitest @types/node@^22` | `npm dependency [vitest, @types/node]` |
+| `npm install --save-exact zod@3.23.8` | `npm dependency [zod]` |
+| `npm i -g typescript` | `npm tool [typescript]` |
+| `pnpm add -D @biomejs/biome` | `pnpm dependency [@biomejs/biome]` |
+| `pnpm --filter web add zod` | `pnpm dependency [zod]` |
+| `yarn add react react-dom` / `bun add hono` / `deno add jsr:@std/path` | `yarn … [react, react-dom]` / `bun … [hono]` / `deno … [jsr:@std/path]` |
+| `cd web && pnpm add zod` | `pnpm dependency [zod]` |
+| `FOO=1 npm i -D vitest` | `npm dependency [vitest]` |
+| `dotnet add package Serilog --version 4.0.0` | `dotnet dependency [Serilog]` |
+| `dotnet add src/Api/Api.csproj package Npgsql` | `dotnet dependency [Npgsql]` |
+| `dotnet add reference ../Core/Core.csproj` | — |
+| `dotnet tool install -g dotnet-ef` / `dotnet tool install dotnet-ef` | `dotnet tool [dotnet-ef]` (both) |
+| `cargo add serde --features derive` | `cargo dependency [serde]` |
+| `cargo add tokio@1 -F full --dev` | `cargo dependency [tokio]` |
+| `cargo add --path ../core` | — |
+| `cargo install cargo-deny --locked` | `cargo tool [cargo-deny]` |
+| `pip install "requests[socks]>=2" flask==3.0` | `pip dependency [requests, flask]` |
+| `pip install -r requirements.txt` / `pip install -e .` | — |
+| `uv add httpx` / `poetry add httpx --group dev` | `uv … [httpx]` / `poetry … [httpx]` |
+| `uv tool install ruff` / `pipx install black` | `uv tool [ruff]` / `pipx tool [black]` |
+| `go get github.com/gin-gonic/gin@v1.10.0` | `go dependency [github.com/gin-gonic/gin]` |
+| `go install golang.org/x/vuln/cmd/govulncheck@latest` | `go tool [golang.org/x/vuln/cmd/govulncheck]` |
+| `go install ./cmd/app` | — |
+| `composer require laravel/sanctum` / `bundle add rails` / `gem install bundler` | `composer dependency [laravel/sanctum]` / `bundle dependency [rails]` / `gem tool [bundler]` |
+| `dart pub add http` / `flutter pub add provider` | `dart dependency [http]` / `flutter dependency [provider]` |
+| `npm i github:user/repo` | `npm dependency [] {github:user/repo}` |
+| `cargo add --git https://github.com/a/b` | `cargo dependency [] {https://github.com/a/b}` |
+| `pnpm add ./packages/ui` | — |
+| `npm install` / `pnpm install` / `npm ci` / `dotnet restore` / `cargo build` / `go mod download` | — |
+| `npx create-next-app@latest` / `pnpm dlx x` / `bunx x` / `uvx ruff` / `dotnet tool run x` | — |
+| `npm uninstall zod` / `cargo remove serde` / `dotnet remove package X` | — |
+| `echo "npm install zod"` | — |
+| `npm install zod; cargo add serde` | two entries: `npm dependency [zod]`, `cargo dependency [serde]` |
 
 Plus `splitCommand('a && "b && c" ; d')` → `['a', '"b && c"', 'd']`.
 
@@ -121,11 +132,19 @@ Run: `node --test tests/core/parse-install.test.mjs` → Expected: FAIL, module 
 
 - [ ] **Step 3: Implement**
 
-Tokenise each segment with a quote-aware splitter. Skip leading `VAR=value` tokens. Identify the manager by the first token and the add subcommand per §6.1. Drop flags; for flags known to take a value (`--filter`, `-F`, `--version`, `--features`, `-C`, `--prefix`, `--workspace`, `-w`) also drop the next token. Strip versions: npm-style split on the last `@` not at index 0; pip strip from the first of `[ = < > ~ ! ;`; go strip from `@`. An `echo`/`printf` first token means not an install.
+Use one rule table: `{ manager, match(tokens) → { kind, argsStart } | null, valueFlags: string[], stripVersion(token) → name, isLocal(token) → boolean }`, one row per command family in §6.1, so adding an ecosystem is one row.
+- Tokenise each segment with a quote-aware splitter, skip leading `VAR=value` tokens, and treat a first token of `echo`/`printf` as not an install.
+- Drop flags. For flags that take a value (`--filter -F --version -v --features --prefix --workspace -w --group -G --git --branch --tag --rev --path --source -s --framework -f`), also drop the next token, except when that flag is the external source itself (`--git`) or a local one (`--path`). `--git` and `--path` decide `external` or dropped.
+- `dotnet add`: if the token after `add` is not `package`, skip it as the project path, then require `package`.
+- Version stripping:
+  - npm-style: last `@` not at index 0;
+  - pip: from the first of `[ = < > ~ ! ;`;
+  - go and cargo: from `@`;
+  - `deno`/`jsr:` names are kept with their prefix.
 
 - [ ] **Step 4: Run, verify pass** — same command → PASS.
 
-- [ ] **Step 5: Commit** — `feat(core): parse dependency-adding install commands`
+- [ ] **Step 5: Commit** — `feat(core): parse dependency and tool installs across ecosystems`
 
 ---
 
@@ -156,36 +175,62 @@ Tokenise each segment with a quote-aware splitter. Skip leading `VAR=value` toke
 
 ---
 
-### Task 3: `core/diff-manifest.mjs`
+### Task 3: Manifest extractors and `core/diff-manifest.mjs`
 
 **Files:**
-- Create: `core/diff-manifest.mjs`
-- Test: `tests/core/diff-manifest.test.mjs`
+- Create: `core/manifests/index.mjs`, one module per family: `core/manifests/{npm,deno,dotnet,cargo,go,python,maven,gradle,ruby,dart,composer}.mjs`, and `core/diff-manifest.mjs`
+- Test: `tests/core/manifests/<family>.test.mjs` (one per family), `tests/core/diff-manifest.test.mjs`
 
 **Interfaces:**
-- Produces:
-  - `DEPENDENCY_SECTIONS = ["dependencies","devDependencies","peerDependencies","optionalDependencies"]`
-  - `applyEdit(content: string, oldString: string, newString: string, replaceAll?: boolean): string` — throws `Error("edit target not found")` when `oldString` is absent.
-  - `addedDependencies(beforeText: string | null, afterText: string): { packages: string[], external: string[] }` — names whose key is new in any section; `workspace:`, `file:`, `link:` versions skipped; `git…`, `github:`, `http(s):` versions go to `external` as `"name (spec)"`. Throws `Error("could not parse package.json")` on invalid JSON.
-  - `OTHER_MANIFESTS = ["pyproject.toml","Cargo.toml","go.mod","composer.json","requirements.txt","Pipfile"]` plus the `*.csproj` pattern, exported as `isOtherManifest(filePath: string): boolean`.
-  - `isPackageJson(filePath: string): boolean` — basename check that accepts `\` and `/`.
+- Each family module exports `{ id: string, matches(fileName: string): boolean, extract(text: string): { names: Set<string>, external: Map<string, string> } }`, where `external` maps name → source for git/URL dependencies. Internal references are excluded entirely (§6.1). Every extractor throws `Error("could not parse <fileName>")` on input it cannot read, and accepts CRLF.
+- `core/manifests/index.mjs`:
+  - `EXTRACTORS` — the array of all family modules;
+  - `findExtractor(filePath: string): Extractor | null` — on the basename, accepting `\` and `/`;
+  - `UNPARSED_MANIFESTS` — `["Package.swift","mix.exs","build.sbt","Podfile","vcpkg.json"]` plus `conanfile.*` and `CMakeLists.txt`, exposed as `isUnparsedManifest(filePath: string): boolean`.
+- `core/diff-manifest.mjs`:
+  - `applyEdit(content: string, oldString: string, newString: string, replaceAll?: boolean): string` — throws `Error("edit target not found")` when `oldString` is absent;
+  - `addedDependencies(extractor, beforeText: string | null, afterText: string): { packages: string[], external: string[] }` — `packages` = names in `after` and not in `before`, sorted; `external` = `"name (source)"` for added external entries.
+- File-name matching per family (exact rules, all case-sensitive except where noted):
 
-- [ ] **Step 1: Write the failing tests**
+| Module | Matches | Reads |
+|---|---|---|
+| `npm` | `package.json` | the four sections; skip `workspace:`/`file:`/`link:`; `git…`, `github:`, `http(s):` → external |
+| `deno` | `deno.json`, `deno.jsonc` | `imports` keys (strip comments for `.jsonc`) |
+| `dotnet` | `*.csproj`, `*.fsproj`, `*.vbproj`, `Directory.Packages.props`, `dotnet-tools.json` | `<PackageReference Include="X"` and `<PackageVersion Include="X"` (attribute order-insensitive; `Update=` ignored); `tools` keys for `dotnet-tools.json` |
+| `cargo` | `Cargo.toml` | keys under `[dependencies]`, `[dev-dependencies]`, `[build-dependencies]`, `[workspace.dependencies]`, `[target.'…'.dependencies]` and dotted/inline forms (`[dependencies.serde]`); `path =` → skipped; `git =` → external |
+| `go` | `go.mod` | `require` single lines and blocks; skip `// indirect` |
+| `python` | `pyproject.toml`, `requirements*.txt`, `Pipfile` | PEP 621 `dependencies` and `optional-dependencies`, `[dependency-groups]`, `[tool.poetry.dependencies]` / `[tool.poetry.group.*.dependencies]` (excluding `python`); requirements lines (skip comments, `-r`, `-e`, `--` options); names normalised per PEP 503 (lowercase, `-_.` → `-`) |
+| `maven` | `pom.xml` | `<dependency>` → `groupId:artifactId` (ignore `<parent>` and `<plugin>`) |
+| `gradle` | `build.gradle`, `build.gradle.kts`, `libs.versions.toml` | `"group:artifact:version"` strings in `implementation\|api\|compileOnly\|runtimeOnly\|testImplementation\|kapt\|ksp` calls; `[libraries]` `module = "g:a"` or `group`+`name` |
+| `ruby` | `Gemfile` | `gem "name"` / `gem 'name'` |
+| `dart` | `pubspec.yaml` | keys under `dependencies`, `dev_dependencies` (skip `sdk:` and `path:` entries) |
+| `composer` | `composer.json` | `require`, `require-dev` keys, excluding `php` and `ext-*` |
+
+Line-based parsing is acceptable for TOML/YAML/XML/Gradle (Global Constraints: no parser libraries). Each test file pins the shapes above.
+
+- [ ] **Step 1: Write the failing tests**, one file per family. Each covers:
+  - the basic shape;
+  - every alternative shape in its row;
+  - the internal reference that must be skipped;
+  - the external source;
+  - CRLF input;
+  - one malformed input that must throw.
+
+Plus `tests/core/diff-manifest.test.mjs`:
 - `new file: every dependency is added` (`beforeText = null`).
-- `added devDependency detected; moved package not counted twice`.
-- `version bump of an existing dependency adds nothing`.
-- `workspace: and file: dependencies are skipped`.
-- `git dependency goes to external`.
-- `CRLF JSON parses`.
-- `invalid JSON throws "could not parse package.json"`.
-- `applyEdit replaces first occurrence; replaceAll replaces all; missing target throws`.
-- `isPackageJson("C:\\p\\web\\package.json") and ("web/package.json") are true; ("package.json.bak") false`.
-- `isOtherManifest("src/App.csproj") true`.
+- `version bump adds nothing`.
+- `reordering adds nothing`.
+- `.csproj edit that only changes TargetFramework adds nothing`.
+- `added PackageReference is reported`.
+- `added Cargo dev-dependency is reported`.
+- `applyEdit` covers first occurrence, `replaceAll`, and target-not-found.
+- `findExtractor("C:\\src\\Api\\Api.csproj").id === "dotnet"`; `findExtractor("web/package.json").id === "npm"`; `findExtractor("package.json.bak") === null`.
+- `isUnparsedManifest("Package.swift") === true`.
 
-- [ ] **Step 2: Run, verify failure.**
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run, verify pass.**
-- [ ] **Step 5: Commit** — `feat(core): detect dependencies added to package.json`
+- [ ] **Step 2: Run, verify failure** — `node --test tests/core/manifests tests/core/diff-manifest.test.mjs` → FAIL.
+- [ ] **Step 3: Implement**, family by family; re-run the family's test after each.
+- [ ] **Step 4: Run all, verify pass.**
+- [ ] **Step 5: Commit** — `feat(core): detect added dependencies across manifest types`
 
 ---
 
@@ -221,30 +266,45 @@ Tokenise each segment with a quote-aware splitter. Skip leading `VAR=value` toke
 - Test: `tests/core/evaluate.test.mjs`
 
 **Interfaces:**
-- Consumes: `parseInstall` (Task 1), `readApprovedPackages` (Task 2), `applyEdit`, `addedDependencies`, `isPackageJson`, `isOtherManifest` (Task 3), `NormalizedCall` (Task 4).
+- Consumes:
+  - `parseInstall` (Task 1);
+  - `readApprovedPackages` (Task 2);
+  - `findExtractor`, `isUnparsedManifest`, `applyEdit`, `addedDependencies` (Task 3);
+  - `NormalizedCall` (Task 4).
 - Produces: `evaluate(call: NormalizedCall, projectDir: string): Promise<{ decision: "pass" | "ask", reason?: string }>`. Never throws: any internal error → `{ decision: "ask", reason: "senior-standards guard error: <message>" }`.
 
-Reason strings (exact):
-- Uncovered packages: `New dependency not covered by an accepted ADR: <comma-separated>. Run the decision gate first, or approve to proceed anyway.`
-- External specs: `New dependency from a non-registry source: <specs>. Run the decision gate first, or approve to proceed anyway.` (when both apply, join the two sentences)
-- Other manifest: `Edit to <basename> may change dependencies (not parsed in v1). Confirm it matches an accepted ADR.`
-- Patch touching `package.json`: `Patch modifies package.json dependencies; confirm it matches an accepted ADR.`
+Matching approved names: exact match, except Python names, which are compared after PEP 503 normalisation, and NuGet names, which are compared case-insensitively.
+
+Reason strings (exact; sentences joined with a space when several apply):
+- Uncovered dependencies: `New dependency not covered by an accepted ADR: <comma-separated>. Run the decision gate first, or approve to proceed anyway.`
+- Uncovered tools: `New tool install not covered by an accepted ADR: <comma-separated>. Run the decision gate first, or approve to proceed anyway.`
+- External specs: `New dependency from a non-registry source: <specs>. Run the decision gate first, or approve to proceed anyway.`
+- Unparsed manifest: `Edit to <basename> may change dependencies (this manifest type is not parsed). Confirm it matches an accepted ADR.`
+- Unapplicable patch to a supported manifest: `Patch modifies <basename>; confirm any dependency change matches an accepted ADR.`
 - ADR problems are appended as ` ADR issues: <problems joined by "; ">.` whenever the decision is `ask`.
 
-Edit and patch rules:
-- For `edit` on `package.json`, read the current file relative to `projectDir` when not absolute.
-- A patch "touches package.json" when a `*** Update File:` or `*** Add File:` header line ends in `package.json` **and** an added line (`+…`) matches `/^\+\s*"[^"]+"\s*:\s*"[^"]*"/`.
+Edit, write and patch rules:
+- `write`/`edit` on a file with an extractor: read the current file (resolve relative paths against `projectDir`; a missing file means `before = null`), build `after` (Write: `content`; Edit: `applyEdit`), then `addedDependencies`.
+- `patch`: parse `*** Update File: <path>` / `*** Add File: <path>` sections. For each section whose path has an extractor:
+  - `Add File` → `before = null`, `after` = the `+` lines;
+  - a single `Update File` section whose hunks apply cleanly to the current file → evaluate like an edit;
+  - otherwise → the unapplicable-patch reason.
+  Sections for unparsed manifests → the unparsed-manifest reason. Everything else in the patch is ignored.
 
 - [ ] **Step 1: Failing tests** (temp project dir per test):
 - `shell install covered by accepted ADR passes`.
 - `shell install with one uncovered package asks and names only it`.
+- `cargo install uncovered tool asks with the tool sentence`.
 - `non-install shell command passes`.
 - `write of new package.json with uncovered deps asks`.
-- `edit adding covered devDependency passes`.
+- `edit adding a covered devDependency passes`.
+- `edit adding a PackageReference to Api.csproj asks; edit changing only TargetFramework passes`.
+- `NuGet approval is case-insensitive` (`packages: [serilog]` covers `Serilog`).
+- `Python approval is PEP 503-normalised` (`packages: [Flask_Login]` covers `flask-login`).
+- `edit to Package.swift asks with the unparsed-manifest reason`.
+- `patch adding a [dependencies] line to Cargo.toml asks; patch to README passes`.
 - `edit with target not found asks with guard error`.
 - `invalid package.json after edit asks with "could not parse package.json"`.
-- `edit to pyproject.toml asks`.
-- `patch adding a dependency line to web/package.json asks; patch to README passes`.
 - `ADR problems are appended to an ask reason`.
 - `null call passes`.
 
@@ -413,15 +473,42 @@ This needs OpenCode v2 ≥ 2.0.29 on the machine. **Ask the user before installi
 
 ---
 
-### Task 13: `repo-standards` and `audit` skills
+### Task 13: `repo-standards` (language-neutral) and `audit` skills
 
 **Files:**
-- Create: `skills/repo-standards/SKILL.md`, `skills/repo-standards/profiles/typescript-node.md`, `skills/audit/SKILL.md`
+- Create: `skills/repo-standards/SKILL.md`, `skills/repo-standards/checklist.md`, `skills/repo-standards/profiles/{typescript-node,dotnet,rust,python,go}.md`, `skills/audit/SKILL.md`
+- Test: `tests/skills/profiles.test.mjs`
 
-- [ ] **Step 1:** `profiles/typescript-node.md`: the §10 table plus every **core** item of §15 (V1, V2, V4, D1–D4, S1–S4, A1, A2, R1, R2, R4, R5, C1, C2, T1) as a checklist, each with the concrete config to apply (e.g. `.npmrc`/`pnpm-workspace.yaml` keys for D2, the Renovate keys for D1). Each **opt** item gets one line on when to offer it. Note that versions and defaults are re-checked against official docs when the skill runs.
-- [ ] **Step 2:** `repo-standards/SKILL.md`: present the whole profile as one bundled decision through `decision-gate` (one ADR listing every package), then apply it via `official-integration`; finish with `pnpm check` green.
-- [ ] **Step 3:** `audit/SKILL.md`: read-only pass over an existing repo against `standards.md`, the profile and the blueprint file set; output a prioritised gap report (blocking / important / nice-to-have) with the fix for each; change nothing without approval.
-- [ ] **Step 4: Commit** — `feat(skills): repository standards profile and audit`
+**Interfaces:**
+- Every profile has exactly these H2 sections, in this order, matching the §10.2 concerns: `Toolchain pin`, `Package manager and lockfile`, `Supply-chain settings`, `Build`, `Format`, `Lint and static analysis`, `Type strictness`, `Tests and coverage`, `Unused code and dependencies`, `Dependency audit`, `Architecture rules`, `Release and publishing`, `Check entry point`, then `Sources`. Every concern section names a candidate and at least one alternative. `Sources` lists the official URLs used, with the date checked.
+- `checklist.md` holds the same concern list with the question each answers (§10.2), plus the universal baseline of §10.1 with the concrete config for each item (Renovate keys for D1, ruleset settings for R1, workflow `permissions` for S3, `.gitattributes`/`.editorconfig` contents for R4, …).
+
+- [ ] **Step 1: Write the failing test** `tests/skills/profiles.test.mjs`:
+  - each of the five profiles exists;
+  - it has the 14 sections above in order;
+  - every concern section contains at least two backticked tool names;
+  - the `Sources` section contains at least one `https://` URL and an ISO date.
+- [ ] **Step 2: Run, verify failure.**
+- [ ] **Step 3: Write `checklist.md`.**
+- [ ] **Step 4: Write the five profiles,** each researched from official sources at the time of writing (not from memory), and each kept short (the skill re-verifies rows at run time).
+  - The TypeScript/Node profile records the accepted choices: pnpm with the D2 settings, Biome, Vitest, Knip, dependency-cruiser, a `check` script.
+  - The .NET, Rust, Python and Go profiles cover the items named in spec §10.3 at minimum.
+- [ ] **Step 5: Write `repo-standards/SKILL.md`:**
+  1. Detect the project's languages from its manifests (reuse the list in Task 3).
+  2. Load the matching profiles, or none.
+  3. Verify each candidate against current official docs.
+  4. Fill the checklist per language.
+  5. Present the universal baseline and every language's choices as one bundled decision through `decision-gate` (one ADR listing every package and tool).
+  6. Apply it through `official-integration`.
+  7. Finish with the project's `check` entry point green.
+
+  For a language without a profile, research every concern from scratch.
+- [ ] **Step 6: Write `audit/SKILL.md`:**
+  - a read-only pass over an existing repo against `standards.md`, the universal baseline, the per-language checklist and the blueprint file set;
+  - output: a prioritised gap report (blocking / important / nice-to-have) with the fix for each;
+  - changes nothing without approval.
+- [ ] **Step 7: Run** `node --test tests/skills/profiles.test.mjs` → PASS.
+- [ ] **Step 8: Commit** — `feat(skills): language-neutral repository standards, seed profiles and audit`
 
 ---
 
@@ -442,18 +529,39 @@ This needs OpenCode v2 ≥ 2.0.29 on the machine. **Ask the user before installi
 ### Task 15: Claude evals (P3)
 
 **Files:**
-- Create: `tests/evals/<case>/prompt.md` and `tests/evals/<case>/graders/*.md` for four cases
+- Create: `tests/evals/<case>/prompt.md`, `tests/evals/<case>/graders/*.md` and any fixture project files under `tests/evals/<case>/` for six cases; `tests/evals/README.md`
 - Modify: `.claude-plugin/plugin.json` → `"experimental": { "evals": "tests/evals" }`
 
-Cases (one per §12 scenario point):
-1. `new-project-blueprint` — prompt: start a Next.js app with auth. Graders: `tool_used: Skill` (project-blueprint), and `llm`: "PASS if no install or product code was written before requirements and architecture docs were proposed".
-2. `auth-decision-gate` — prompt: add authentication to an existing app. Graders: `regex` over the reply for `better-auth` and a Markdown table; `llm`: "PASS if a recommendation is made and the user is asked before anything is installed".
-3. `guard-uncovered-install` — prompt: install lodash. Graders: `tool_used` on the Bash install with `arm: with-only`; `llm`: "PASS if the reply mentions the decision gate or an ADR".
-4. `vendor-mcp-proposal` — prompt: integrate Better Auth (ADR fixture present). Graders: `llm`: "PASS if the Better Auth MCP server and skills are proposed for Claude and OpenCode and not written without asking".
+Cases (scenarios A–C of spec §12):
 
-- [ ] **Step 1:** Write the cases (use `claude plugin eval init` to scaffold, then edit).
-- [ ] **Step 2:** Run `claude plugin eval . --ablation none` once → record scores in `tests/evals/README.md`. Evals cost model usage: run on demand and before releases, not in CI.
-- [ ] **Step 3: Commit** — `test(evals): behavioural evals for the main scenarios`
+**Scenario A (Next.js):**
+1. `new-project-blueprint` — prompt: start a Next.js app with auth.
+   - `tool_used: Skill` (project-blueprint);
+   - `llm`: "PASS if no install or product code was written before requirements and architecture docs were proposed".
+2. `auth-decision-gate` — prompt: add authentication to an existing Next.js app.
+   - `regex` over the reply for `better-auth` and a Markdown table;
+   - `llm`: "PASS if a recommendation is made and the user is asked before anything is installed".
+3. `guard-uncovered-install` — prompt: install lodash.
+   - `tool_used` on the Bash install, `arm: with-only`;
+   - `llm`: "PASS if the reply mentions the decision gate or an ADR".
+4. `vendor-mcp-proposal` — prompt: integrate Better Auth (fixture: accepted ADR for `better-auth`).
+   - `llm`: "PASS if the Better Auth MCP server and skills are proposed for Claude and OpenCode and not written without asking".
+
+**Scenario B (.NET):**
+
+5. `dotnet-database-gate` — fixture: minimal ASP.NET Core Web API (`Api.csproj`, `Program.cs`); prompt: "add a database to store orders".
+   - `regex` for a Markdown table naming at least two of `PostgreSQL|SQL Server|SQLite`;
+   - `llm`: "PASS if a data-access option (e.g. EF Core vs Dapper) is compared and the user is asked before any PackageReference is added".
+
+**Scenario C (Rust):**
+
+6. `rust-logging-and-standards` — fixture: minimal binary crate; prompt: "add logging and set up the repo standards".
+   - `regex` for `tracing`;
+   - `llm`: "PASS if logging options are compared before `cargo add`, and the proposed standards include a toolchain pin, clippy with warnings denied, and a dependency audit tool, each with a cited official source".
+
+- [ ] **Step 1:** Write the cases. Scaffold with `claude plugin eval init`, then edit; keep fixtures minimal (no build artefacts).
+- [ ] **Step 2:** Run `claude plugin eval . --ablation none` once and record the scores in `tests/evals/README.md`. Evals cost model usage: run them on demand and before releases, not in CI.
+- [ ] **Step 3: Commit** — `test(evals): behavioural evals for Next.js, .NET and Rust scenarios`
 
 ---
 
@@ -468,7 +576,7 @@ Cases (one per §12 scenario point):
   - requirements: Superpowers in each harness; OpenCode ≥ 2.0.29;
   - install for Claude and OpenCode as in §13, including the Windows npm fallback and private-repo credentials;
   - recommended `npx ctx7 setup --claude` / `--opencode`;
-  - the manual scenario check of §12;
+  - the manual scenario checks of §12 (A–C);
   - uninstall.
 - [ ] **Step 2:** Write `CONTRIBUTING.md` (commit convention, `npm run check`, ADR process, release steps) and `AGENTS.md` (layout, commands, rules for agents working on this repo).
 - [ ] **Step 3: Create the private GitHub repo — ask the user first.** Either they approve installing `gh` with its official installer and run `gh auth login` themselves, or they create an empty private repo `senior-standards` on github.com and give the URL. Then `git remote add origin …` and `git push -u origin main`.
@@ -481,5 +589,5 @@ Cases (one per §12 scenario point):
 ### Task 17: End-to-end verification
 
 - [ ] **Step 1:** Run `npm run check` on a clean clone → green. Confirm CI is green on Ubuntu and Windows.
-- [ ] **Step 2:** Run the §12 scenario manually in Claude Code and in OpenCode, in a throwaway project. Record each of the four checkpoints (pass/fail plus a note) in `docs/verification/2026-10-21-v0.1.0.md`, and commit it as `docs: v0.1.0 verification record`.
+- [ ] **Step 2:** Run §12 scenarios A (Next.js), B (.NET) and C (Rust) manually in Claude Code and in OpenCode, each in a throwaway project. Record every checkpoint (pass/fail plus a note) in `docs/verification/2026-10-21-v0.1.0.md`, and commit it as `docs: v0.1.0 verification record`.
 - [ ] **Step 3:** For anything that fails, open a follow-up task; don't patch it silently.

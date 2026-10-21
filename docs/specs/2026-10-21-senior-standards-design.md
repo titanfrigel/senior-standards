@@ -1,6 +1,6 @@
 # senior-standards — Design
 
-- **Status:** Approved v3.1 (2026-10-21). v3.1: OpenCode v2 only; Context7 installed through its official setup instead of bundled.
+- **Status:** Approved v3.2 (2026-10-21). v3.1: OpenCode v2 only; Context7 via its official setup. v3.2: language-neutral (any stack), multi-ecosystem manifest guard, seed profiles.
 - **Date:** 2026-10-21
 - **Author:** kling.gaetan@gmail.com (with Claude)
 - **Type:** Plugin for **Claude Code** and **OpenCode**, companion to Superpowers v6.4.x
@@ -17,7 +17,7 @@
 
 ### Assumptions
 - **A1.** Superpowers stays installed in each harness and keeps owning the process (brainstorming → spec → writing-plans → TDD → review). Superpowers already supports both harnesses. This plugin adds rules and steps; it does not replace any Superpowers skill.
-- **A2.** The primary stack is TypeScript/Node. Other ecosystems get the decision gate and the install guard, but no repo-standards profile in v1.
+- **A2.** Any language or stack (JS/TS, .NET, Rust, Python, Go, JVM, …). Nothing in the process, skills or guard assumes one; stack-specific knowledge lives in optional seed profiles and live research (§10).
 - **A3.** The user works on Windows. All plugin code runs cross-platform on Node built-ins (Claude Code hooks run under Node; OpenCode plugins run under Bun, which supports the same built-ins).
 - **A4.** "Always ask" applies to direct runtime and dev dependencies, external services, databases, hosting and paid APIs. It does not apply to transitive dependencies or to reinstalling from an existing lockfile.
 - **A5.** OpenCode **v2 only** (≥ 2.0.29, where `setup(ctx)` exposes tool hooks). OpenCode v1 is not supported.
@@ -33,7 +33,7 @@
 - Replacing or forking any Superpowers skill.
 - Detecting service, DB or hosting choices mechanically. Those are enforced by the skill and the session rules only, since no tool call reliably signals them.
 - Gating `npx`/`pnpm dlx`/`bunx` one-off executions in v1 (official scaffolders and CLIs run this way).
-- Stack profiles other than TypeScript/Node in v1.
+- Exhaustive per-language profiles: seed profiles exist for five languages, everything else goes through live research (§10.3).
 - Harnesses other than Claude Code and OpenCode (Codex, Cursor, Gemini…). The core/adapter split (§4) keeps them possible later.
 - Publishing to a public marketplace or registry.
 
@@ -72,13 +72,14 @@ senior-standards/                      # private GitHub repo
 │   ├── evaluate.mjs                   # normalised tool call → {decision, reason}
 │   ├── normalize.mjs                  # harness tool names/args → {kind, command | file, before, after | patch}
 │   ├── parse-install.mjs              # command → {manager, packages[]}
-│   ├── diff-manifest.mjs              # package.json before/after → added deps
+│   ├── manifests/                     # one extractor per manifest type: text → Set<name>
+│   ├── diff-manifest.mjs              # manifest before/after → added deps (any supported type)
 │   └── adr-index.mjs                  # docs/adr/*.md → approved package set
 ├── skills/                            # shared by both harnesses (Agent Skills format)
 │   ├── project-blueprint/{SKILL.md, templates/}
 │   ├── decision-gate/SKILL.md
 │   ├── official-integration/SKILL.md
-│   ├── repo-standards/{SKILL.md, profiles/typescript-node.md}
+│   ├── repo-standards/{SKILL.md, checklist.md, profiles/{typescript-node,dotnet,rust,python,go}.md}
 │   ├── audit/SKILL.md                 # P1
 │   └── adr/SKILL.md                   # P2
 ├── tests/
@@ -106,7 +107,7 @@ The plugin has **zero runtime dependencies**: Node/Bun built-ins only.
 | `project-blueprint` | Produces the project documentation set (§7). | `decision-gate` |
 | `decision-gate` | Comparison → recommendation → user choice → ADR (§8). | — |
 | `official-integration` | Official docs lookup, official install, vendor MCP/skills proposal for each harness (§9). | — |
-| `repo-standards` | Applies the TS/Node baseline and core practices as one bundled decision (§10, §15). | `decision-gate` |
+| `repo-standards` | Universal baseline + per-language checklist, as one bundled decision (§10, §15). | `decision-gate` |
 | `audit` | Gap report of an existing repo against these standards; changes nothing without approval (P1). | — |
 | `adr` | Create, supersede and reindex ADRs (P2). | — |
 
@@ -156,19 +157,37 @@ Injected by the Claude SessionStart hook and by the OpenCode session context hoo
 
 | Manager | Commands |
 |---|---|
-| npm | `npm install\|i\|add <pkg…>` |
-| pnpm | `pnpm add <pkg…>` |
-| yarn | `yarn add <pkg…>` |
-| bun | `bun add <pkg…>` |
-| Python | `pip install <pkg…>` (not `-r`/`-e .`), `uv add`, `poetry add` |
-| Rust / Go / PHP / .NET | `cargo add`, `go get`, `composer require`, `dotnet add package` |
+| JavaScript / TypeScript | `npm install\|i\|add <pkg…>` (incl. `-g`), `pnpm add`, `yarn add`, `bun add`, `deno add` |
+| .NET | `dotnet add [<project>] package <pkg>`, `dotnet tool install [-g] <tool>` |
+| Rust | `cargo add <crate…>`, `cargo install <crate>` |
+| Python | `pip install <pkg…>` (not `-r`/`-e .`), `uv add`, `uv tool install`, `poetry add`, `pipx install` |
+| Go | `go get <module>`, `go install <module>@<version>` |
+| Others | `composer require`, `bundle add`, `gem install`, `dart pub add`, `flutter pub add` |
 
-Not gated: lockfile installs with no package arguments (`npm install`, `pnpm install`, `npm ci`…), removals, and `npx`-style one-off runs. Chained commands (`&&`, `;`, `|`) are split and each segment checked.
+Global tool installs (`npm i -g`, `cargo install`, `dotnet tool install -g`, `go install`, `pipx install`, `uv tool install`, `gem install`) are gated like project dependencies: they also add something to the user's setup. They are labelled "tool" in the reason.
 
-**File edits:**
-- `package.json` via Write/Edit: rebuild the post-edit file, diff the four dependency sections, gate added names.
-- `package.json` via a patch tool (OpenCode `patch`): patches can't be rebuilt reliably, so any patch touching `package.json` dependency sections → `ask`.
-- Other manifests (`pyproject.toml`, `Cargo.toml`, `go.mod`…): `ask` whenever an edit touches them.
+Not gated: restores from an existing lockfile or manifest (`npm ci`, `pnpm install`, `dotnet restore`, `cargo build`, `pip install -r`, `go mod download`…), removals, and one-off runs (`npx`, `pnpm dlx`, `bunx`, `uvx`, `dotnet tool run`). Chained commands (`&&`, `||`, `;`, `|`) are split and each segment checked.
+
+**File edits — one rule for every ecosystem:** each supported manifest has a small extractor `text → Set<dependency name>`. For Write/Edit, the guard rebuilds the post-edit text, and the added dependencies are `names(after) − names(before)` (a new file has an empty "before"). Version changes, reordering and non-dependency edits never prompt.
+
+| Manifest | Names extracted from |
+|---|---|
+| `package.json`, `deno.json` | `dependencies`, `devDependencies`, `peerDependencies`, `optionalDependencies` / `imports` |
+| `*.csproj`, `*.fsproj`, `Directory.Packages.props` | `PackageReference Include` / `PackageVersion Include` |
+| `.config/dotnet-tools.json` | `tools` keys |
+| `Cargo.toml` | `[dependencies]`, `[dev-dependencies]`, `[build-dependencies]`, `[target.*.dependencies]`, `[workspace.dependencies]` keys |
+| `go.mod` | `require` lines and blocks (`// indirect` excluded) |
+| `pyproject.toml` | `[project] dependencies`, `[project.optional-dependencies]`, `[dependency-groups]`, `[tool.poetry.*dependencies]` |
+| `requirements*.txt` | one name per line, comments and `-r`/`-e` lines skipped |
+| `pom.xml` | `<dependency>` `groupId:artifactId` |
+| `build.gradle`, `build.gradle.kts`, `gradle/libs.versions.toml` | `group:artifact` coordinates in dependency configurations / `[libraries]` |
+| `Gemfile` | `gem "<name>"` |
+| `pubspec.yaml` | `dependencies` / `dev_dependencies` keys |
+| `composer.json` | `require` / `require-dev` keys |
+
+Internal references are never gated: `workspace:`/`file:`/`link:` specs, `path =` crates, `ProjectReference`, local `replace` directives. Git/URL sources are gated and named by their source.
+
+Any other file whose name marks it as a dependency manifest (a fixed list: `Package.swift`, `mix.exs`, `build.sbt`, `Podfile`, `vcpkg.json`, `conanfile.*`, `CMakeLists.txt` with `FetchContent`) → `ask` on every edit. Patches (OpenCode `patch`) that touch a supported manifest are applied in memory when they are a single-file update hunk; otherwise → `ask`.
 
 ### 6.2 Approval source
 
@@ -273,23 +292,40 @@ Tightly coupled choices can be one decision and one ADR (e.g. the repo baseline,
    This changes persistent config, so it is always a question, never automatic.
 5. **Record:** link the docs page and any MCP/skill added in the ADR; list project MCP servers in `AGENTS.md`.
 
-## 10. `repo-standards` skill (TypeScript/Node profile)
+## 10. `repo-standards` skill (language-neutral)
 
-One bundled decision, one ADR. Accepted defaults (2026-10-21), re-checked against current releases each time the skill runs:
+The skill works for any language. It has three layers and produces one bundled decision and one ADR per project.
 
-| Concern | Default | Main alternative |
-|---|---|---|
-| Package manager | **pnpm** (§16.3) | npm, bun |
-| Language | TypeScript `strict`, `noUncheckedIndexedAccess` | — |
-| Lint + format | **Biome**; ESLint (lint only) added just for a plugin Biome lacks (§16.2) | ESLint + Prettier |
-| Tests | Vitest | node:test |
-| Git hooks | lefthook + commitlint | husky |
-| Releases | Chosen per project (V3) | — |
-| Env config | Typed, validated env module (zod) | t3-env |
-| CI | GitHub Actions running `pnpm check` + build | — |
-| Dependency updates | Renovate (D1) | Dependabot |
+### 10.1 Universal baseline (every project)
+Every **core** practice of §15 that does not depend on a language: V1, V2, V4, D1, D3, S1–S4, A1, A2, R1, R2, R4, R5, C1, C2, T1, plus `.editorconfig`. Each project still decides *how* a practice is implemented when that depends on the language (e.g. the tool behind A1).
 
-Plus every **core** practice in §15. Architecture style (feature-sliced, layered, hexagonal) is chosen in `project-blueprint`, not here.
+### 10.2 Per-project concerns (researched live)
+For the project's language(s), the skill fills this checklist from current official sources, then presents it through `decision-gate`:
+
+| Concern | Question answered |
+|---|---|
+| Toolchain pin | How the language/SDK version is pinned (`.node-version`, `global.json`, `rust-toolchain.toml`, `.python-version`, `go` directive…) |
+| Package manager and lockfile | Which manager; lockfile committed; frozen/locked install in CI |
+| Supply-chain settings | Install-script policy, release-age delay, provenance or signature checks the manager offers |
+| Build | Build command; warnings treated as errors where the toolchain supports it |
+| Format | Formatter and its CI check |
+| Lint and static analysis | Linter/analyzers, strictness level |
+| Type strictness | Strict compiler/type-checker settings (TS `strict`, C# `Nullable`, mypy/pyright strict…) |
+| Tests and coverage | Test runner, coverage tool, threshold on changed code (T1) |
+| Unused code and dependencies | The ecosystem's equivalent of D4 |
+| Dependency audit | Advisory scanner for the ecosystem |
+| Architecture rules | Tool enforcing the layer rules of the architecture doc (A1) |
+| Release and publishing | Versioning/release tool and registry for this ecosystem (V3) |
+| Single `check` entry point | How R5 is provided: package script, `justfile`, `Makefile`, cargo alias, `dotnet` tool… |
+
+Polyglot repos fill the checklist once per language and share the universal baseline.
+
+### 10.3 Seed profiles (starting points, not truth)
+`skills/repo-standards/profiles/` holds short "usual defaults" for **TypeScript/Node, .NET, Rust, Python and Go**. Each row of a profile is a candidate the skill verifies against current official docs before presenting it; a stale row is replaced, and the ADR records what was actually chosen. A language without a profile goes through the same checklist with research only.
+
+The TypeScript/Node profile carries the decisions already made for it: pnpm (§16.3) with D2-style settings, Biome (§16.2), Vitest, Knip, dependency-cruiser. The other profiles are written during implementation from official sources; examples of what they will typically cover: `global.json`, `Directory.Build.props` with `TreatWarningsAsErrors` + `Nullable`, central package management and `dotnet format` for .NET; `rust-toolchain.toml`, `clippy -D warnings`, `cargo-deny`, `cargo-machete` for Rust; uv, Ruff, pyright/mypy strict, pytest for Python; `golangci-lint`, `govulncheck`, `go mod tidy` check for Go.
+
+Architecture style (feature-sliced, layered, hexagonal, clean) is chosen in `project-blueprint`, not here.
 
 ## 11. Error handling
 - Adapters never throw into the host except the guard fallback throw (§6.5). All other errors become `ask` (guard) or a logged warning (context injection, skill registration).
@@ -303,12 +339,15 @@ Plus every **core** practice in §15. Architecture style (feature-sliced, layere
   - OpenCode: load `plugin.mjs` with a fake v2 host context (as Superpowers' own tests do); assert skills registered, context injected only in top-level sessions, guard decisions, and that no error escapes `setup`.
 - **Skill format check:** every `SKILL.md` passes both harnesses' frontmatter rules (§4.4).
 - **Validation:** `claude plugin validate . --strict` in CI.
-- **Evals (P3):** `claude plugin eval` cases for the scenario below. OpenCode has no equivalent runner; the same scenario is a documented manual check there.
-- **Scenario,** in a throwaway "Next.js app with auth" project, in each harness:
+- **Manifest extractors:** one fixture-based test file per ecosystem, including internal references that must not count and CRLF input.
+- **Evals (P3):** `claude plugin eval` cases for the scenarios below. OpenCode has no equivalent runner; the same scenarios are documented manual checks there.
+- **Scenario A,** a throwaway "Next.js app with auth" project, in each harness:
   1. Blueprint docs produced before any code.
   2. Auth goes through the decision gate with Better Auth compared; ADR written.
   3. `pnpm add better-auth` passes after the ADR; `pnpm add lodash` prompts (or is refused, if the §6.5 fallback applies).
   4. Better Auth MCP server and skills proposed for both harnesses, not silently added.
+- **Scenario B,** a .NET Web API: adding a database goes through the decision gate (e.g. PostgreSQL vs SQL Server vs SQLite, EF Core vs Dapper); an edit adding a `PackageReference` not covered by an ADR prompts; an unrelated `.csproj` edit does not.
+- **Scenario C,** a Rust CLI: adding logging compares `tracing` and `log`-based options; `cargo add` of an uncovered crate prompts; `repo-standards` proposes the Rust checklist with toolchain pin, clippy and cargo-deny verified against current docs.
 
 CI matrix: Node LTS on `ubuntu-latest` and `windows-latest` (the user's platform).
 
@@ -335,9 +374,10 @@ Superpowers is a stated requirement in the README, not a declared dependency, be
 1. Context7 used as the third documentation source (§16.1); v3.1: installed with its official setup, not bundled.
 2. Name `senior-standards` confirmed.
 3. Private GitHub repository.
-4. pnpm and Biome as defaults (§16.2–16.3).
+4. pnpm and Biome as defaults for TypeScript/Node projects (§16.2–16.3).
 5. All §15 proposals accepted with their tiers.
 6. **v3:** Claude Code and OpenCode compatibility required.
+7. **v3.2:** language-neutral; seed profiles for TypeScript/Node, .NET, Rust, Python, Go (§10).
 
 ## 15. Accepted practices
 
@@ -348,16 +388,16 @@ Superpowers is a stated requirement in the README, not a declared dependency, be
 |---|---|---|
 | V1 | SemVer for libraries and packages; CalVer or none for deployed apps. | core |
 | V2 | Conventional Commits enforced on PR titles (squash merge). | core |
-| V3 | Release tool per project: Changesets (explicit intent, monorepos/libraries), release-please (release PRs from history), semantic-release (fully automatic). | opt |
+| V3 | Release tool per project, compared for its ecosystem (e.g. release-please works across languages; Changesets for JS; cargo-release for Rust; MinVer/Nerdbank.GitVersioning for .NET). | opt |
 | V4 | Generated `CHANGELOG.md`; Git tag per release. | core |
 
 ### 15.2 Dependency and supply-chain hygiene
 | # | Practice | Tier |
 |---|---|---|
 | D1 | Renovate: grouped updates, `minimumReleaseAge` of a few days, automerge for patch-level dev dependencies after CI, monthly lockfile maintenance, pinned Action digests. | core |
-| D2 | pnpm: keep `minimumReleaseAge` (1 day default since v11), `allowBuilds` allowlist with `strictDepBuilds`, `trustPolicy: no-downgrade`. | core |
-| D3 | Pinned `.node-version`, `engines`, `packageManager`; CI installs with a frozen lockfile. | core |
-| D4 | Knip in CI: unused files, exports and dependencies fail the build. | core |
+| D2 | The package manager's supply-chain settings switched on (for pnpm: `minimumReleaseAge`, `allowBuilds` + `strictDepBuilds`, `trustPolicy: no-downgrade`; per-ecosystem equivalents from §10.2). | core |
+| D3 | Toolchain and package-manager versions pinned; lockfile committed; CI installs in locked/frozen mode. | core |
+| D4 | Unused code and dependencies fail CI (Knip, cargo-machete, the ecosystem's equivalent). | core |
 | D5 | License allowlist for production dependencies. | opt |
 | D6 | Package-health row in `decision-gate`. | plugin |
 
@@ -384,7 +424,7 @@ Superpowers is a stated requirement in the README, not a declared dependency, be
 | R2 | PR template linking spec, plan and ADRs, with a "docs updated" checklist; issue templates. | core |
 | R3 | `CODEOWNERS`. | opt |
 | R4 | `.gitattributes` with `* text=auto eol=lf`. | core |
-| R5 | One `pnpm check` (lint, typecheck, test, knip, architecture rules) used by pre-commit, CI and the agent. | core |
+| R5 | One `check` entry point (format, lint, type-check/build, test, unused-code, architecture rules) used by pre-commit, CI and the agent; its mechanism is chosen per project (§10.2). | core |
 | R6 | VS Code recommended extensions and settings; optional dev container. | opt |
 
 ### 15.6 Documentation as code
@@ -414,7 +454,7 @@ The plugin repository applies the same practices to itself where they fit (V1, V
 ### 16.1 Context7 MCP
 Free plan: 1,000 calls/month, then 20 bonus calls a day; Pro $10/seat/month. Public library docs only; read-only; no project code sent. Adds version-specific docs for libraries without their own docs MCP or `llms.txt`; secondary to a vendor's own server. v3.1: not bundled. Context7's official installer, `npx ctx7 setup` with `--claude` or `--opencode`, authenticates with OAuth, generates the API key, configures the remote server (`https://mcp.context7.com/mcp`) and installs Context7's own skill. Bundling would mean re-implementing that and handling the key ourselves, against the "official installation" rule. The README lists it as a recommended setup step; `official-integration` uses it when present.
 
-### 16.2 Biome vs ESLint + Prettier
+### 16.2 Biome vs ESLint + Prettier (TypeScript/Node projects)
 | Criterion | Biome 2 | ESLint + typescript-eslint + Prettier |
 |---|---|---|
 | Tools and configs | One binary, one config | Three tools, several configs and plugins |
@@ -425,7 +465,7 @@ Free plan: 1,000 calls/month, then 20 bonus calls a day; Pro $10/seat/month. Pub
 
 Decision: Biome; ESLint for linting only when a needed plugin is missing.
 
-### 16.3 pnpm vs npm vs Bun
+### 16.3 pnpm vs npm vs Bun (TypeScript/Node projects)
 | Criterion | pnpm 11+ | npm 11 | Bun |
 |---|---|---|---|
 | Undeclared dependencies | Blocked | Possible (flat) | Possible |
