@@ -2,7 +2,7 @@ name: dependency-check
 
 on:
   pull_request:
-    branches: [main, dev]
+    branches: [main]
 
 permissions: {}
 

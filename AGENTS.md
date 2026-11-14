@@ -34,9 +34,9 @@ Claude Code + OpenCode v2 plugin, layered on Superpowers: decision gate, ADRs, p
 <!-- senior-standards:setup v1 -->
 - Goal: Claude Code and OpenCode plugin that enforces senior engineering standards: decision gate, ADRs, project blueprint and a dependency guard.
 - Docs: full
-- Tests: strict
+- Tests: standard
 - Public repository: yes
 - Maintained over time: yes
-- Versioned releases: yes
-- Overrides: none
+- Versioned releases: no
+- Overrides: V1 on, V4 on: plugin releases keep semantic versions, `v*` tags and CHANGELOG.md, published from `main`
 - Recorded: 2026-11-14
