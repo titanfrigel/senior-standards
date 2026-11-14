@@ -167,7 +167,7 @@ ${REMINDER}
     const second = { sessionID: "ses_1", system: [] };
     await hooks["session.context"](second);
     assert.match(second.system[0].text, /decision-gate/);
-    assert.doesNotMatch(second.system[0].text, /project-init/);
+    assert.doesNotMatch(second.system[0].text, /no project setup record/);
   });
 });
 
@@ -179,7 +179,7 @@ test("context hook still pushes the standards when the reminder fails", async ()
   await hooks["session.context"](event);
   assert.equal(event.system.length, 1);
   assert.match(event.system[0].text, /decision-gate/);
-  assert.doesNotMatch(event.system[0].text, /project-init/);
+  assert.doesNotMatch(event.system[0].text, /no project setup record/);
 });
 
 test("context hook skips child sessions (parentID set)", async () => {

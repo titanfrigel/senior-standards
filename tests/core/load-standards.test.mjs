@@ -3,15 +3,15 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { loadStandards } from "../../core/load-standards.mjs";
+import { loadStandards, SUBAGENT_PATH } from "../../core/load-standards.mjs";
 
 const FALLBACK =
   "senior-standards: standards file could not be loaded; follow the decision-gate skill before adding dependencies or services.";
 
-test("standards text is under 60 lines", () => {
+test("standards text stays within 120 lines", () => {
   const text = loadStandards();
   assert.notEqual(text, FALLBACK);
-  assert.ok(text.split("\n").length < 60);
+  assert.ok(text.split("\n").length <= 120);
 });
 
 test("mentions docs/specs, docs/plans, project-blueprint, decision-gate, official-integration, AGENTS.md", () => {
@@ -72,6 +72,38 @@ test("standards forbid AI attribution in commits, PRs, comments and docs", () =>
     '"Generated with/by …" footers',
     "commit messages, PR and issue titles and descriptions, review comments, code comments, docs or changelogs",
     "unless the content is genuinely about that tool",
+  ]) {
+    assert.ok(text.includes(phrase), `missing ${phrase}`);
+  }
+});
+
+test("standards carry the project-flow rules", () => {
+  const text = loadStandards();
+  for (const phrase of [
+    "ask all the questions for the current stage in one message",
+    "changelog in chat",
+    "PR titles follow Conventional Commits",
+    "never `master`",
+    "in English",
+    "## Project setup",
+    "applies only when Tests is `strict`",
+    "project-init",
+    "release PR",
+  ]) {
+    assert.ok(text.includes(phrase), `missing ${phrase}`);
+  }
+});
+
+test("subagent standards are short and cover the essentials", () => {
+  const text = loadStandards(SUBAGENT_PATH);
+  assert.notEqual(text, FALLBACK);
+  assert.ok(text.split("\n").length <= 15);
+  for (const phrase of [
+    "English",
+    "Conventional Commits",
+    "AI attribution",
+    "setup record",
+    "report the need to the parent",
   ]) {
     assert.ok(text.includes(phrase), `missing ${phrase}`);
   }

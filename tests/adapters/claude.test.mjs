@@ -100,7 +100,7 @@ test("session-start omits the reminder when a valid record exists", async () => 
   await withPlainProject(async (dir) => {
     await writeFile(path.join(dir, "AGENTS.md"), RECORD);
     const ctx = context(run("session-start.mjs", startInput(dir), noEnvDir));
-    assert.doesNotMatch(ctx, /project-init/);
+    assert.doesNotMatch(ctx, /no project setup record/);
   });
 });
 
@@ -120,7 +120,7 @@ ${REMINDER}`),
 test("session-start: invalid JSON stdin and missing cwd yield standards only", async () => {
   const bad = context(run("session-start.mjs", "not json", noEnvDir));
   assert.match(bad, /decision-gate/);
-  assert.doesNotMatch(bad, /project-init/);
+  assert.doesNotMatch(bad, /no project setup record/);
   const missing = context(
     run(
       "session-start.mjs",
@@ -129,7 +129,7 @@ test("session-start: invalid JSON stdin and missing cwd yield standards only", a
     ),
   );
   assert.match(missing, /decision-gate/);
-  assert.doesNotMatch(missing, /project-init/);
+  assert.doesNotMatch(missing, /no project setup record/);
 });
 
 test("pre-tool-use: uncovered pnpm add asks and names the package", async () => {

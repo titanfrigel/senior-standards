@@ -5,6 +5,9 @@ export const FALLBACK =
   "senior-standards: standards file could not be loaded; follow the decision-gate skill before adding dependencies or services.";
 
 const DEFAULT_PATH = fileURLToPath(new URL("./standards.md", import.meta.url));
+export const SUBAGENT_PATH = fileURLToPath(
+  new URL("./standards-subagent.md", import.meta.url),
+);
 
 const FRONTMATTER = /^---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/;
 
