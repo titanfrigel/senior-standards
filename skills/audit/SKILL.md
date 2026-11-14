@@ -20,15 +20,15 @@ Read `## Project setup` in the root `AGENTS.md` and compare each value with the 
 
 | Setting | Check |
 |---|---|
-| Always | Ruleset on `main` with PRs required and the CI checks required (R1); CI runs `check` on PRs into the integration branch (R5); gitleaks hook config and CI job (S1); PR-title job (V2); `.github/pull_request_template.md` (R2); least-privilege, SHA-pinned workflows (S3); frozen installs (D3); `.editorconfig`, `.gitattributes` (R4); docs checks and ADR index (C1, C2); `CONTRIBUTING.md` workflow section; the dependency check job (D6) and `.github/scripts/senior-standards/` with a `VERSION` not older than the installed plugin's version (`<plugin root>/package.json`) — an outdated `VERSION` is a finding, fixed by re-running the vendor script |
+| Always | Ruleset on `main` with PRs required and the CI checks required (R1); CI runs `check` on PRs into `main`, and into `dev` too when Versioned is `yes` (R5); gitleaks hook config and CI job (S1); PR-title job (V2); `.github/pull_request_template.md` (R2); least-privilege, SHA-pinned workflows (S3); frozen installs (D3); `.editorconfig`, `.gitattributes` (R4); docs checks and ADR index (C1, C2); `CONTRIBUTING.md` workflow section (C4); the dependency check job (D6) and `.github/scripts/senior-standards/` with a `VERSION` not older than the installed plugin's version (`<plugin root>/package.json`) — an outdated `VERSION` is a finding, fixed by re-running the vendor script |
 | Docs: basic | `README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `docs/adr/` with `0001` and accepted ADRs for the stack |
 | Docs: full | Docs: basic plus `docs/product/requirements.md` and `docs/architecture/overview.md`; layer rules enforced in `check` (A1) |
 | Tests: light | CI builds and runs the tests that exist; tests cover the critical paths |
 | Tests: standard | Tests sit beside most source modules; CI reports coverage |
 | Tests: strict | Coverage threshold on changed code enforced in CI (T1) |
 | Public: yes | The repository is public on the forge (or the Public items are overrides); CodeQL enabled (S2); secret scanning with push protection on (S1); Scorecard workflow (S5); `SECURITY.md` (S4) |
-| Maintained: yes | Renovate config with lockfile maintenance (D1); a dependency audit step in CI |
-| Versioned: yes | `dev` exists with a ruleset (R1); `.github/PULL_REQUEST_TEMPLATE/release.md`; versioning scheme in `CONTRIBUTING.md` (V1); release tool config (V3); generated changelog and `v*` tags (V4) |
+| Maintained: yes | Renovate config with lockfile maintenance (D1); a dependency audit step in CI (D7) |
+| Versioned: yes | `dev` exists with a ruleset and in the CI branch filters (R7, R1); `.github/PULL_REQUEST_TEMPLATE/release.md` (V5); versioning scheme in `CONTRIBUTING.md` (V1); release tool config (V3); generated changelog and `v*` tags (V4) |
 | Versioned: no | No `dev` branch; PRs target `main` |
 
 - **No setup record** in the root `AGENTS.md` is itself a finding (Important): fix by running `project-init` (`senior-standards:project-init`). Without a record, check the Always items only and say the rest was skipped.
@@ -58,7 +58,7 @@ Read `## Project setup` in the root `AGENTS.md` and compare each value with the 
    - <short list of what already meets the standards>
    ```
 
-   - **Blocking:** security exposure or broken guarantees (no secret scanning or leaked secret patterns, no lockfile or unfrozen CI installs, workflows with write-all tokens or unpinned third-party actions, no default-branch protection, unreviewed install scripts, dependencies with open high/critical advisories, `check` red).
+   - **Blocking:** security exposure or broken guarantees (no gitleaks in CI, or GitHub secret scanning missing when Public is `yes`, or leaked secret patterns, no lockfile or unfrozen CI installs, workflows with write-all tokens or unpinned third-party actions, no default-branch protection, unreviewed install scripts, dependencies with open high/critical advisories, `check` red).
    - **Important:** missing quality gates and docs (no `check` entry point, no ADRs for the stack, no Conventional Commit enforcement, and record items such as no coverage threshold at Tests `strict`, no Renovate at Maintained `yes`, missing `SECURITY.md` at Public `yes`, no architecture rules at Docs `full`).
    - **Nice to have:** optional items (D5, A3, R3, R6, C3, T2), polish, consistency.
    - Setup record drift goes under Blocking or Important by the item's own weight (for example a missing ruleset is Blocking, a missing release template Important).

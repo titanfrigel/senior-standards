@@ -32,10 +32,10 @@ Read `## Project setup` in the root `AGENTS.md` (the Git top-level directory). I
 ## Order
 
 1. Toolchain pin and lockfile, supply-chain settings, format/lint/types, tests and coverage, unused-code and architecture rules, the `check` entry point (it succeeds with no tests yet).
-2. `.editorconfig`, `.gitattributes`, PR template (R2, `templates/pull_request_template.md` → `.github/pull_request_template.md`), release template only when Versioned is `yes` (`templates/release.md` → `.github/PULL_REQUEST_TEMPLATE/release.md`), markdownlint/lychee, pre-commit hooks.
+2. `.editorconfig`, `.gitattributes`, PR template (R2, `templates/pull_request_template.md` → `.github/pull_request_template.md`), release template V5 only when Versioned is `yes` (`templates/release.md` → `.github/PULL_REQUEST_TEMPLATE/release.md`), markdownlint/lychee, pre-commit hooks, the `CONTRIBUTING.md` workflow section (C4).
 3. The vendored dependency check (D6): from the plugin root, `node scripts/vendor-dependency-check.mjs <projectDir>`.
-4. Workflows (pinned by SHA, least-privilege `permissions`): the CI workflow first, then PR title, gitleaks, dependency check, and the record's items (dependency audit, CodeQL, Scorecard, release tool); `renovate.json` when Maintained is `yes`.
-5. When Versioned is `yes`: create `dev` from `main` (ask first).
+4. When Versioned is `yes`: create `dev` from `main` (R7; ask first).
+5. Workflows (pinned by SHA, least-privilege `permissions`), triggered on PRs into `main` and, when Versioned is `yes`, `dev` too, so release PRs get the same checks: the CI workflow first, then PR title, gitleaks, dependency check, and the record's items (dependency audit D7, CodeQL, Scorecard, release tool); `renovate.json` when Maintained is `yes`.
 6. Open a PR with the workflows. Make checks required in R1 only after the CI workflow has reported them once on that PR, using the check names from that run; a check that never reported would block every PR. R1 covers `main`, and `dev` when Versioned is `yes`.
 
 ## Item mode
@@ -45,15 +45,15 @@ When `project-init` hands over a list of checklist IDs (after a new record or a 
 - Skip items already present and correct; say so.
 - Still verify against current docs, run `decision-gate` for every new tool, and ask before each GitHub setting.
 - Follow the [order](#order); required checks still wait for a CI report.
-- Removals (an item the record no longer calls for) are proposed, never done: list each with what it removes and ask per item. For Versioned `yes` → `no`, in order, each asked: merge `dev` into `main`, retarget open PRs to `main`, delete `dev` and its ruleset, remove the release template.
+- Removals (an item the record no longer calls for) are proposed, never done: list each with what it removes and ask per item. For Versioned `yes` → `no`, in order, each asked: merge `dev` into `main`, retarget open PRs to `main`, delete `dev` and its ruleset, switch `main`'s ruleset back to squash only with linear history, drop `dev` from the CI branch filters and from Renovate's `baseBranches`, remove the release template.
 - D6 in item mode also refreshes an outdated copy: re-run the vendor script and commit the result.
 
 ## GitHub repository settings
 
 These change account or repository settings, so ask before each one, naming the setting and what changes; never batch them under one yes, and never change them silently:
 
-- Rulesets on `main`, and on `dev` when Versioned is `yes` (R1); required checks after the first CI report.
-- Creating or deleting the `dev` branch.
+- Rulesets on `main`, and on `dev` when Versioned is `yes` (R1, R7); required checks after the first CI report.
+- Creating or deleting the `dev` branch (R7).
 - Secret scanning and push protection (S1, Public).
 - CodeQL default setup (S2).
 - Installing the Renovate app (D1).

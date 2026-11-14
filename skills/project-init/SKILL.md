@@ -31,15 +31,15 @@ IDs refer to `repo-standards`'s checklist. The integration branch is `dev` when 
 
 | Setting | Effect |
 |---|---|
-| Always | Feature branches; PRs into the integration branch; ruleset R1 on `main` (and on `dev` when Versioned is yes); CI builds and runs the tests that exist, as required checks (see [Required checks](#required-checks-without-tests)); gitleaks as a pre-commit hook and in CI (the gitleaks half of S1); Conventional Commits on PR titles (V2); PR template; `CONTRIBUTING.md` workflow section; least-privilege workflows S3; pins and frozen installs D3; dependency check in CI D6; one `check` entry point R5; `.editorconfig` and line endings R4; error-handling and validation conventions A2; docs checks C1 and ADR index C2 |
+| Always | Feature branches; PRs into the integration branch; ruleset R1 on `main` (and on `dev` when Versioned is yes); CI builds and runs the tests that exist through one `check` entry point R5, as required checks (see [Required checks](#required-checks-without-tests)); gitleaks as a pre-commit hook and in CI (the gitleaks half of S1); Conventional Commits on PR titles (V2); PR template R2; `CONTRIBUTING.md` workflow section C4; least-privilege workflows S3; pins and frozen installs D3; dependency check in CI D6; `.editorconfig` and line endings R4; error-handling and validation conventions A2; docs checks C1 and ADR index C2 |
 | Docs: basic | `project-blueprint` writes README, `AGENTS.md`, `CONTRIBUTING.md`, ADR 0001 and the stack ADRs; skips requirements and architecture |
 | Docs: full | Full `project-blueprint` flow; A1 (layer rules in CI) applies |
 | Tests: light | No test-first; tests for critical paths only; CI runs build and tests |
 | Tests: standard | Tests written with each feature, in the same change; no test-first requirement; coverage reported, not enforced |
 | Tests: strict | `superpowers:test-driven-development` applies; coverage threshold on changed code in CI (T1) |
 | Public: yes | S2 CodeQL (default setup), the GitHub-native half of S1 (secret scanning and push protection), S5 Scorecard, S4 `SECURITY.md` |
-| Maintained: yes | D1 Renovate, dependency audit in CI (the ecosystem's audit tool, chosen through `decision-gate`), lockfile maintenance |
-| Versioned: yes | `dev` integration branch covered by R1; feature PRs into `dev`; release PRs `dev` → `main`; V1 versioning scheme, V3 release tool, V4 changelog and tags |
+| Maintained: yes | D1 Renovate with lockfile maintenance, D7 dependency audit in CI (the ecosystem's audit tool, chosen through `decision-gate`) |
+| Versioned: yes | R7 `dev` integration branch covered by R1; feature PRs into `dev`; release PRs `dev` → `main`; V1 versioning scheme, V3 release tool, V4 changelog and tags, V5 release PR template |
 | Versioned: no | Feature PRs straight into `main`; no `dev` |
 
 The optional items A3, R3, R6, C3, T2 and D5 are not init questions; `repo-standards` offers them once when they apply. A private repository on a plan with GitHub's code security features can turn the Public items on as overrides.

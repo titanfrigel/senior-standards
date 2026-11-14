@@ -200,3 +200,65 @@ test("audit lists one drift check per setting", async () => {
   assert.ok(drift.includes(".github/scripts/senior-standards/"));
   assert.ok(drift.includes("VERSION"));
 });
+
+const ID_HEADING = /^#+ [A-Z]\d+ /;
+
+test("every item in checklist part 2 has an ID", async () => {
+  const text = await part2();
+  const check = (block, prefix) => {
+    const lines = block.split("\n");
+    const headings = lines.filter(
+      (line, i) => line.startsWith(prefix) && !inFence(lines, i),
+    );
+    assert.ok(headings.length > 0, `no ${prefix.trim()} headings`);
+    for (const heading of headings) {
+      assert.match(heading, ID_HEADING, `item without an ID: ${heading}`);
+    }
+  };
+  check(section(text, "### Always"), "#### ");
+  check(section(text, "### By setup record"), "##### ");
+});
+
+test("every ID project-init's effects table lists exists in the checklist", async () => {
+  const init = section(
+    await read("project-init/SKILL.md"),
+    "## What each answer turns on",
+  );
+  const ids = new Set(init.match(/\b[A-Z]\d+\b/g));
+  for (const id of ["C4", "D7", "R7", "V5"]) {
+    assert.ok(ids.has(id), `project-init does not list ${id}`);
+  }
+  const full = await checklist();
+  // Part 3 optional items are table rows, not headings.
+  const optional = section(
+    full,
+    "## Part 3: optional items (offer once, per project)",
+  );
+  for (const id of ids) {
+    const found =
+      itemHeadings(full, id).length > 0 ||
+      optional.split("\n").some((line) => line.startsWith(`| ${id} `));
+    assert.ok(found, `no item ${id}`);
+  }
+});
+
+test("new IDs sit under their setting", async () => {
+  const text = await part2();
+  assert.equal(itemHeadings(section(text, "### Always"), "C4").length, 1);
+  const maintained = section(text, "#### Maintained: yes");
+  assert.equal(itemHeadings(maintained, "D7").length, 1);
+  const versioned = section(text, "#### Versioned: yes");
+  for (const id of ["R7", "V5"]) {
+    assert.equal(itemHeadings(versioned, id).length, 1, `missing ${id}`);
+  }
+});
+
+test("CI runs on PRs into main and, when versioned, dev", async () => {
+  const always = section(await part2(), "### Always");
+  const r5 = section(always, "#### R5 One `check` entry point");
+  assert.match(r5, /into `main`, and into `dev` too when Versioned is `yes`/);
+  const d6 = section(always, "#### D6 Dependency check in CI");
+  assert.match(d6, /branches: \[main\]/);
+  assert.match(d6, /add dev when Versioned is yes/);
+  assert.doesNotMatch(r5, /runs on PRs into the integration branch/);
+});
