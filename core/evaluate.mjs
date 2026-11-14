@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { readApprovedPackages } from "./adr-index.mjs";
 import { applyUpdate, parsePatch } from "./apply-patch.mjs";
+import { ecosystemOfManager, isApproved } from "./approval.mjs";
 import { findAttribution } from "./attribution.mjs";
 import { addedDependencies, applyEdit } from "./diff-manifest.mjs";
 import { findExtractor, isUnparsedManifest } from "./manifests/index.mjs";
@@ -18,32 +19,6 @@ const ATTRIBUTION_TAIL =
   "The user prefers no AI attribution; remove it, or approve to proceed anyway.";
 const MAX_SHOWN_MATCHES = 5;
 const ATTRIBUTION_ITEM = "ai-attribution";
-
-const PYTHON_MANAGERS = new Set(["pip", "uv", "poetry", "pipx"]);
-const NUGET_MANAGERS = new Set(["dotnet", "nuget"]);
-
-function ecosystemOfManager(manager) {
-  if (PYTHON_MANAGERS.has(manager)) return "python";
-  if (NUGET_MANAGERS.has(manager)) return "dotnet";
-  if (manager === "cargo") return "cargo";
-  return "exact";
-}
-
-function matchKey(ecosystem, name) {
-  if (ecosystem === "python") return name.toLowerCase().replace(/[-_.]+/g, "-");
-  if (ecosystem === "dotnet") return name.toLowerCase();
-  // crates.io treats - and _ in crate names as the same name.
-  if (ecosystem === "cargo") return name.replaceAll("_", "-");
-  return name;
-}
-
-function isApproved(approved, ecosystem, name) {
-  const key = matchKey(ecosystem, name);
-  for (const entry of approved) {
-    if (matchKey(ecosystem, entry) === key) return true;
-  }
-  return false;
-}
 
 async function readIfExists(filePath) {
   try {
