@@ -8,3 +8,4 @@
 | 0002 | [Plugin repository tooling](0002-plugin-repo-tooling.md) | accepted | 2026-10-21 |
 | 0003 | [OpenCode v2 guard mechanism](0003-opencode-guard-mechanism.md) | accepted | 2026-10-21 |
 | 0004 | [Public repository under the MIT licence](0004-public-repository-under-mit.md) | accepted | 2026-10-21 |
+| 0005 | [Project setup record in AGENTS.md](0005-project-setup-record.md) | accepted | 2026-11-14 |

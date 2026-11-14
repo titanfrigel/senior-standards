@@ -2,6 +2,7 @@
 
 - **Status:** Approved v3.3 (2026-10-21). v3.3: no-AI-attribution rule (§5) and a guard check for commit and PR text (§6.6). v3.1: OpenCode v2 only; Context7 via its official setup. v3.2: language-neutral (any stack), multi-ecosystem manifest guard, seed profiles. v3.2.1: the Claude guard also matches the Windows `PowerShell` tool, and a failing guard hook blocks the call (`onFailure: "block"`); the OpenCode guard asks once per tool call when `setup` runs repeatedly, keeps a configured deny, and fails closed on its own errors.
 - **Date:** 2026-10-21
+- **Extended by:** [v0.2.0 project flow design](2026-11-14-project-flow-design.md): the `project-init` skill and setup record, standards additions, branch hygiene in the guard and the CI dependency check.
 - **Author:** titanfrigel@gmail.com
 - **Type:** Plugin for **Claude Code** and **OpenCode**, companion to Superpowers v6.4.x
 
