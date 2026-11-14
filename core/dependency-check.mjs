@@ -19,7 +19,7 @@ const CONFIRM = "Confirm any dependency change matches an accepted ADR.";
 const ADR_HINT =
   "Write an ADR in docs/adr with status: accepted and these names in packages:";
 const MANUAL_HINT =
-  "Non-registry sources and unparsable manifests always fail this check: record the decision in an ADR and have a maintainer review the change.";
+  "A manifest that cannot be parsed always fails this check: fix it so its dependencies can be read.";
 const USAGE = "Usage: node dependency-check.mjs --base <sha> [--dir <path>]";
 
 class GitError extends Error {}
@@ -168,15 +168,14 @@ export async function checkDependencies({ projectDir, base, git }) {
         (name) => !isApproved(approved, extractor.id, name),
       ),
     );
-    // Like the guard: a new non-registry source is never covered by an ADR
-    // name alone; its bare name joins `names` only when unapproved.
-    for (const entry of added.external) {
-      const { name } = splitExternal(entry);
-      if (!isApproved(approved, extractor.id, name)) names.add(name);
-    }
-    if (names.size === 0 && added.external.length === 0) continue;
+    // A new non-registry source is covered only when an accepted ADR lists the
+    // exact source string; approving the bare name is not enough.
+    const external = added.external.filter(
+      (entry) => !approved.has(splitExternal(entry).source),
+    );
+    if (names.size === 0 && external.length === 0) continue;
     const result = { file, names: [...names].sort() };
-    if (added.external.length > 0) result.external = added.external;
+    if (external.length > 0) result.external = external;
     uncovered.push(result);
   }
   return { uncovered, warnings, problems };
@@ -212,10 +211,12 @@ function report({ uncovered, warnings, problems }, out) {
     if (note) out(`    ${note}\n`);
     for (const entry of external) {
       const { name, source } = splitExternal(entry);
-      out(`    ${name} comes from a non-registry source: ${source}\n`);
+      out(
+        `    ${name} comes from a non-registry source: ${source}; list the source \`${source}\` in an accepted ADR's packages to approve it\n`,
+      );
     }
     for (const name of names) all.add(name);
-    if (note || external.length > 0) unapprovable = true;
+    if (note) unapprovable = true;
   }
   for (const problem of problems) out(`ADR issue: ${problem}\n`);
   if (all.size > 0) out(`${ADR_HINT} ${[...all].sort().join(", ")}\n`);

@@ -188,7 +188,7 @@ test("BOM and CRLF in manifests are tolerated", async () => {
   });
 });
 
-test("non-registry source is uncovered unless its name is approved", async () => {
+test("non-registry source is uncovered unless its source is approved", async () => {
   const git = () =>
     fakeGit({
       changes: [{ status: "M", path: "package.json" }],
@@ -199,52 +199,46 @@ test("non-registry source is uncovered unless its name is approved", async () =>
     assert.deepEqual((await check(dir, git())).uncovered, [
       {
         file: "package.json",
-        names: ["mylib"],
+        names: [],
         external: ["mylib (github:acme/mylib)"],
       },
     ]);
     const { code, stdout } = await cliRun(dir, git());
     assert.equal(code, 1);
-    assert.match(stdout, /^ {2}package\.json: mylib$/m);
+    assert.match(stdout, /^ {2}package\.json$/m);
     assert.match(
       stdout,
-      /^ {4}mylib comes from a non-registry source: github:acme\/mylib$/m,
+      /^ {4}mylib comes from a non-registry source: github:acme\/mylib; list the source `github:acme\/mylib` in an accepted ADR's packages to approve it$/m,
     );
+    assert.doesNotMatch(stdout, /these names in packages/);
   });
   await withAdr(["mylib"], async (dir) => {
-    assert.deepEqual((await check(dir, git())).uncovered, [
-      {
-        file: "package.json",
-        names: [],
-        external: ["mylib (github:acme/mylib)"],
-      },
-    ]);
+    assert.equal((await cliRun(dir, git())).code, 1);
+  });
+  await withAdr(["github:acme/mylib"], async (dir) => {
+    assert.deepEqual((await check(dir, git())).uncovered, []);
   });
 });
 
-test("switching an approved name to a non-registry source fails", async () => {
-  await withAdr(["zod"], async (dir) => {
-    const git = fakeGit({
+test("switching an approved name to a non-registry source needs the source approved", async () => {
+  const git = () =>
+    fakeGit({
       changes: [{ status: "M", path: "package.json" }],
       base: { "package.json": pkg({ zod: "^3" }) },
       head: { "package.json": pkg({ zod: "github:someone/zod" }) },
     });
-    assert.deepEqual((await check(dir, git)).uncovered, [
-      {
-        file: "package.json",
-        names: [],
-        external: ["zod (github:someone/zod)"],
-      },
-    ]);
-    const { code, stdout } = await cliRun(dir, git);
+  await withAdr(["zod"], async (dir) => {
+    const { code, stdout } = await cliRun(dir, git());
     assert.equal(code, 1);
-    assert.match(stdout, /^ {2}package\.json$/m);
     assert.match(
       stdout,
-      /^ {4}zod comes from a non-registry source: github:someone\/zod$/m,
+      /^ {4}zod comes from a non-registry source: github:someone\/zod; list the source `github:someone\/zod` in an accepted ADR's packages to approve it$/m,
     );
-    assert.doesNotMatch(stdout, /these names in packages/);
-    assert.match(stdout, /Non-registry sources .* always fail this check/);
+  });
+  await withAdr(["zod", "github:someone/zod"], async (dir) => {
+    const { code, stdout } = await cliRun(dir, git());
+    assert.equal(code, 0);
+    assert.match(stdout, /No new dependencies outside accepted ADRs/);
   });
 });
 
