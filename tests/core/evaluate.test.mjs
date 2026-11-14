@@ -636,3 +636,60 @@ test("more than five matches are summarised", async () => {
     );
   });
 });
+
+const fakeGit = (extra = {}) => ({
+  topLevel: async () => null,
+  defaultBranch: async () => "main",
+  currentBranch: async () => "feature",
+  ...extra,
+});
+
+test("a direct push to main asks with the branch-hygiene item", async () => {
+  await withProject({}, [], async (dir) => {
+    const r = await evaluate(shell("git push origin main"), dir, {
+      git: fakeGit(),
+    });
+    assert.deepEqual(r, {
+      decision: "ask",
+      reason: "Changes reach main through a pull request, not a direct push.",
+      items: ["branch-hygiene"],
+    });
+  });
+});
+
+test("attribution and a push to main report both items", async () => {
+  await withProject({}, [], async (dir) => {
+    const r = await evaluate(
+      shell(
+        'git commit -m "x" -m "Co-Authored-By: Claude <noreply@anthropic.com>" && git push origin main',
+      ),
+      dir,
+      { git: fakeGit() },
+    );
+    assert.equal(r.decision, "ask");
+    assert.deepEqual(r.items, ["ai-attribution", "branch-hygiene"]);
+    assert.match(r.reason, /AI attribution/);
+    assert.match(r.reason, /direct push/);
+  });
+});
+
+test("a push to a feature branch passes", async () => {
+  await withProject({}, [], async (dir) => {
+    assert.deepEqual(
+      await evaluate(shell("git push origin feature"), dir, { git: fakeGit() }),
+      { decision: "pass" },
+    );
+  });
+});
+
+test("a throwing git reader never escapes evaluate", async () => {
+  await withProject({}, [], async (dir) => {
+    const boom = () => {
+      throw new Error("boom");
+    };
+    const r = await evaluate(shell("git push"), dir, {
+      git: { topLevel: boom, defaultBranch: boom, currentBranch: boom },
+    });
+    assert.equal(r.decision, "pass");
+  });
+});

@@ -7,10 +7,13 @@ import { readApprovedPackages } from "./adr-index.mjs";
 import { applyUpdate, parsePatch } from "./apply-patch.mjs";
 import { ecosystemOfManager, isApproved } from "./approval.mjs";
 import { findAttribution } from "./attribution.mjs";
+import { branchHygieneReasons, touchesBranches } from "./branch-hygiene.mjs";
 import { addedDependencies, applyEdit } from "./diff-manifest.mjs";
+import { createGitReader } from "./git-reader.mjs";
 import { findExtractor, isUnparsedManifest } from "./manifests/index.mjs";
 import { parseInstall } from "./parse-install.mjs";
 import { vcsTextOf } from "./parse-vcs-text.mjs";
+import { readSetupRecord } from "./setup-record.mjs";
 
 const TAIL = "Run the decision gate first, or approve to proceed anyway.";
 
@@ -19,6 +22,7 @@ const ATTRIBUTION_TAIL =
   "The user prefers no AI attribution; remove it, or approve to proceed anyway.";
 const MAX_SHOWN_MATCHES = 5;
 const ATTRIBUTION_ITEM = "ai-attribution";
+const BRANCH_ITEM = "branch-hygiene";
 
 async function readIfExists(filePath) {
   try {
@@ -211,21 +215,46 @@ async function attributionReason(call, projectDir) {
   return `${ATTRIBUTION_HEAD} (${shown.join("; ")}). ${ATTRIBUTION_TAIL}`;
 }
 
-async function decide(call, projectDir) {
+/** Sentences for master branches and direct pushes; null when clean. */
+async function branchReason(call, projectDir, git) {
+  if (call.kind !== "shell" || !touchesBranches(call.command)) return null;
+  let versioned;
+  try {
+    versioned = (await readSetupRecord(projectDir, git)).values.versioned;
+  } catch {
+    versioned = undefined;
+  }
+  const reasons = await branchHygieneReasons(call.command, projectDir, {
+    git,
+    versioned,
+  });
+  return reasons.length === 0 ? null : reasons.join(" ");
+}
+
+async function decide(call, projectDir, git) {
   if (!call) return { decision: "pass" };
   const dependency = await dependencyReason(call, projectDir);
   const attribution = await attributionReason(call, projectDir);
-  if (dependency === null && attribution === null) return { decision: "pass" };
-  const reason = [dependency, attribution].filter(Boolean).join(" ");
-  return attribution === null
+  const branch = await branchReason(call, projectDir, git);
+  const parts = [dependency, attribution, branch];
+  if (parts.every((part) => part === null)) return { decision: "pass" };
+  const reason = parts.filter(Boolean).join(" ");
+  const items = [];
+  if (attribution !== null) items.push(ATTRIBUTION_ITEM);
+  if (branch !== null) items.push(BRANCH_ITEM);
+  return items.length === 0
     ? { decision: "ask", reason }
-    : { decision: "ask", reason, items: [ATTRIBUTION_ITEM] };
+    : { decision: "ask", reason, items };
 }
 
 /** Never throws: any internal error becomes an `ask`. */
-export async function evaluate(call, projectDir) {
+export async function evaluate(
+  call,
+  projectDir,
+  { git = createGitReader() } = {},
+) {
   try {
-    return await decide(call, projectDir);
+    return await decide(call, projectDir, git);
   } catch (error) {
     let reason = `senior-standards guard error: ${error?.message ?? String(error)}`;
     try {
