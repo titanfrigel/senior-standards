@@ -90,3 +90,18 @@ test("project-blueprint skill follows the docs level", async () => {
     /skip steps 2 and 4|skips? (the )?(requirements|steps 2)/i,
   );
 });
+
+test("project-blueprint skill drops dead README links by setup record", async () => {
+  const skill = await readFile(
+    fileURLToPath(
+      new URL("../../skills/project-blueprint/SKILL.md", import.meta.url),
+    ),
+    "utf8",
+  );
+  assert.match(
+    skill,
+    /requirements and architecture documents in `README\.md`/,
+  );
+  assert.match(skill, /omit the Security policy link from `README\.md`/);
+  assert.doesNotMatch(skill, /## Scope\n\n\n/);
+});
