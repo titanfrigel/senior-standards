@@ -252,7 +252,7 @@ A CI job that fails a PR adding a direct dependency that no accepted ADR lists, 
 
 - **Same logic as the guard.** The check is `core/dependency-check.mjs`, which imports only the `core/` files the guard uses (manifest extractors, the "names added" diff, the ADR index and approval matching). There is no bundle: the script `scripts/vendor-dependency-check.mjs <projectDir>` copies those files verbatim into the project's `.github/scripts/senior-standards/`, keeping the `core/` layout, and writes a `VERSION` file (the plugin version they came from) and a `README.md` (what the folder is, how CI runs it, how to refresh it). This repository vendors its own copy the same way.
 - **In the project.** `repo-standards` runs the vendor script and adds a job (always-on item, new checklist ID D6) that checks out with `fetch-depth: 0` and runs `node .github/scripts/senior-standards/core/dependency-check.mjs --base <PR base SHA>`. It uses the Node.js preinstalled on GitHub-hosted runners, so the project needs no Node toolchain and nothing from the plugin.
-- **Behaviour.** For each supported manifest changed between the merge base and the head, compute the names added; fail with the list of uncovered names and the ADR to write. Exit codes: 0 nothing uncovered, 1 uncovered names, 2 usage or Git error. A name is approved by an accepted ADR's `packages`; a new non-registry source (Git, URL, path) is approved only when an ADR lists the exact source string, including any `#ref`. A supported manifest that cannot be parsed fails. Manifests that always ask in the guard (the fixed list) produce a warning, not a failure. Removals, version bumps and lockfile-only changes pass.
+- **Behaviour.** For each supported manifest changed between the merge base and the head, compute the names added; fail with the list of uncovered names and the ADR to write. Exit codes: 0 nothing uncovered, 1 uncovered names, 2 usage, Git or other runtime error. A name is approved by an accepted ADR's `packages`; a new non-registry source (Git, URL, path) is approved only when an ADR lists the exact source string, including any `#ref`. A supported manifest that cannot be parsed fails. Manifests that always ask in the guard (the fixed list) produce a warning, not a failure. Removals, version bumps and lockfile-only changes pass.
 - **Updates.** Refresh by re-running the vendor script, which replaces the folder. `audit` reports a `VERSION` older than the installed plugin's version; `repo-standards` item mode refreshes it.
 
 ### 11.2 Branch hygiene in the guard
@@ -263,7 +263,7 @@ New guard checks, outcome `ask` like every guard check, never `deny`:
 - `git init -b master`, `git branch master`, `git checkout -b master`, `git switch -c master`. Reason: the default branch is `main`.
 - A direct `git push` to `main` (explicit `main`, `HEAD:main` or `refs/heads/main` refspec, or no refspec while the current branch is `main`), and the same for `dev` when the setup record says Versioned is `yes`. Reason: changes reach `main` through PRs.
 
-Reading Git config and the current branch uses `git` through `node:child_process` with a short timeout, injected into `core` as a reader so `core` stays testable; a failed read skips the check rather than asking.
+Reading Git config and the current branch uses `git` through `node:child_process` with a short timeout, injected into `core` as a reader so `core` stays testable. If reading the current branch fails, the push check is skipped; if `init.defaultBranch` cannot be read, `git init` without `-b` asks.
 
 ### 11.3 Release PR template
 

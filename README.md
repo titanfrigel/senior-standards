@@ -68,14 +68,14 @@ To change a setting later ("tests are now strict", "this repository is now publi
 
 | Setting | Turns on |
 | :- | :- |
-| Always | Feature branches and PRs; a ruleset on `main`; CI with one `check` entry point; gitleaks; Conventional Commit PR titles; PR template; `CONTRIBUTING.md` workflow; least-privilege workflows; frozen installs; the dependency check in CI; docs checks and the ADR index |
+| Always | Feature branches and PRs; a ruleset on `main`; CI with one `check` entry point; gitleaks; Conventional Commit PR titles; PR template; `CONTRIBUTING.md` workflow; least-privilege workflows; frozen installs; the dependency check in CI; `.editorconfig` and line endings; error-handling and validation conventions; docs checks and the ADR index |
 | Docs: `basic` / `full` | README, `AGENTS.md`, `CONTRIBUTING.md` and ADRs / plus requirements and architecture docs and layer rules in CI |
 | Tests: `light` / `standard` / `strict` | Critical paths only / tests with each feature / test-first and a coverage threshold in CI |
 | Public repository: `yes` | CodeQL, secret scanning with push protection, OpenSSF Scorecard, `SECURITY.md` |
 | Maintained over time: `yes` | Renovate and a dependency audit in CI |
 | Versioned releases: `yes` | A `dev` integration branch with its own ruleset; release PRs `dev` → `main` (merge commits allowed on `main` for them); versioning, release tool, changelog, tags, release PR template |
 
-Without a record, the injected standards carry one extra line: "This repository has no project setup record. Before planning features, run project-init." Claude Code reads the record once per session; OpenCode on each turn, so there the line disappears as soon as the record exists.
+Without a record, the injected standards carry one extra line: "This repository has no project setup record. Before planning features, run project-init." Claude Code reads the record at session start (and again after a clear or compaction); OpenCode on each turn, so there the line disappears as soon as the record exists.
 
 ## Dependency guard
 
@@ -107,7 +107,7 @@ Shell commands that would bypass the branch rules ask first (never deny):
 - creating a `master` branch (`git init -b master`, `git branch master`, `git checkout -b master`, `git switch -c master`);
 - a direct `git push` to `main` (explicit `main`, `HEAD:main` or `refs/heads/main`, or no refspec while on `main`), and to `dev` when the setup record says Versioned releases is `yes`.
 
-Git config and the current branch are read with `git` and a short timeout; if the read fails, the check is skipped rather than asking.
+Git config and the current branch are read with `git` and a short timeout. If reading the current branch fails, the push check is skipped; if `init.defaultBranch` cannot be read, `git init` without `-b` asks.
 
 ### Dependency check in CI
 
@@ -123,7 +123,7 @@ The folder holds verbatim copies of the `core/` files the check needs, a `VERSIO
 node .github/scripts/senior-standards/core/dependency-check.mjs --base <PR base SHA>
 ```
 
-with the Node.js preinstalled on GitHub-hosted runners, so the project needs nothing from the plugin. It exits 0 when every added direct dependency is covered by an accepted ADR's `packages`, 1 when names are uncovered (listed with the ADR to write), and 2 on a usage or Git error. A dependency from a non-registry source (Git, URL, path) is approved only by listing the exact source string, including any `#ref`. A supported manifest that cannot be parsed fails; a change to a manifest type the check does not parse produces a warning. To refresh, re-run the vendor script; `audit` flags a `VERSION` older than the installed plugin. This repository runs the same job on itself.
+with the Node.js preinstalled on GitHub-hosted runners, so the project needs nothing from the plugin. It exits 0 when every added direct dependency is covered by an accepted ADR's `packages`, 1 when names are uncovered (listed with the ADR to write), and 2 on a usage, Git or other runtime error. A dependency from a non-registry source (Git, URL, path) is approved only by listing the exact source string, including any `#ref`. A supported manifest that cannot be parsed fails; a change to a manifest type the check does not parse produces a warning. To refresh, re-run the vendor script; `audit` flags a `VERSION` older than the installed plugin. This repository runs the same job on itself.
 
 ### AI-attribution check
 
