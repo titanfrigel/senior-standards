@@ -26,3 +26,15 @@ Claude Code + OpenCode v2 plugin, layered on Superpowers: decision gate, ADRs, p
 - Every new dependency goes through an ADR first.
 - Paths via `node:path`; accept `\` and `/`. Must work on Windows and Linux.
 - Conventional Commits; update docs with the code; ADRs are append-only.
+
+## Project setup
+
+<!-- senior-standards:setup v1 -->
+- Goal: Claude Code and OpenCode plugin that enforces senior engineering standards: decision gate, ADRs, project blueprint and a dependency guard.
+- Docs: full
+- Tests: strict
+- Public repository: yes
+- Maintained over time: yes
+- Versioned releases: yes
+- Overrides: none
+- Recorded: 2026-11-14
