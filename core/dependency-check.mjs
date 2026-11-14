@@ -18,6 +18,8 @@ const GIT_MAX_BUFFER = 64 * 1024 * 1024;
 const CONFIRM = "Confirm any dependency change matches an accepted ADR.";
 const ADR_HINT =
   "Write an ADR in docs/adr with status: accepted and these names in packages:";
+const MANUAL_HINT =
+  "Non-registry sources and unparsable manifests always fail this check: record the decision in an ADR and have a maintainer review the change.";
 const USAGE = "Usage: node dependency-check.mjs --base <sha> [--dir <path>]";
 
 class GitError extends Error {}
@@ -112,6 +114,20 @@ async function textsOf(change, from, extractor, git) {
 }
 
 /**
+ * Names added between two texts. A base that cannot be parsed counts as
+ * absent, so every name is new; a head that cannot be parsed throws.
+ */
+function diffTexts(extractor, before, after) {
+  try {
+    return addedDependencies(extractor, before, after);
+  } catch (error) {
+    if (before === null) throw error;
+    extractor.extract(after);
+    return addedDependencies(extractor, null, after);
+  }
+}
+
+/**
  * Lists names that manifests changed between `base` and HEAD add without an
  * accepted ADR. `git` is injectable: { changedFiles, show, mergeBase? }.
  */
@@ -138,11 +154,13 @@ export async function checkDependencies({ projectDir, base, git }) {
     if (after === null) continue;
     let added;
     try {
-      added = addedDependencies(extractor, before, after);
+      added = diffTexts(extractor, before, after);
     } catch (error) {
-      warnings.push(
-        `${file} could not be parsed (${error.message}). ${CONFIRM}`,
-      );
+      uncovered.push({
+        file,
+        names: [],
+        note: `could not be parsed (${error.message}); confirm its dependencies with an accepted ADR`,
+      });
       continue;
     }
     const names = new Set(
@@ -150,16 +168,15 @@ export async function checkDependencies({ projectDir, base, git }) {
         (name) => !isApproved(approved, extractor.id, name),
       ),
     );
-    const external = [];
+    // Like the guard: a new non-registry source is never covered by an ADR
+    // name alone; its bare name joins `names` only when unapproved.
     for (const entry of added.external) {
       const { name } = splitExternal(entry);
-      if (isApproved(approved, extractor.id, name)) continue;
-      names.add(name);
-      external.push(entry);
+      if (!isApproved(approved, extractor.id, name)) names.add(name);
     }
-    if (names.size === 0) continue;
+    if (names.size === 0 && added.external.length === 0) continue;
     const result = { file, names: [...names].sort() };
-    if (external.length > 0) result.external = external;
+    if (added.external.length > 0) result.external = added.external;
     uncovered.push(result);
   }
   return { uncovered, warnings, problems };
@@ -189,16 +206,20 @@ function report({ uncovered, warnings, problems }, out) {
   }
   out("New dependencies not covered by an accepted ADR:\n");
   const all = new Set();
-  for (const { file, names, external = [] } of uncovered) {
-    out(`  ${file}: ${names.join(", ")}\n`);
+  let unapprovable = false;
+  for (const { file, names, external = [], note } of uncovered) {
+    out(names.length > 0 ? `  ${file}: ${names.join(", ")}\n` : `  ${file}\n`);
+    if (note) out(`    ${note}\n`);
     for (const entry of external) {
       const { name, source } = splitExternal(entry);
       out(`    ${name} comes from a non-registry source: ${source}\n`);
     }
     for (const name of names) all.add(name);
+    if (note || external.length > 0) unapprovable = true;
   }
   for (const problem of problems) out(`ADR issue: ${problem}\n`);
-  out(`${ADR_HINT} ${[...all].sort().join(", ")}\n`);
+  if (all.size > 0) out(`${ADR_HINT} ${[...all].sort().join(", ")}\n`);
+  if (unapprovable) out(`${MANUAL_HINT}\n`);
   return 1;
 }
 

@@ -212,7 +212,39 @@ test("non-registry source is uncovered unless its name is approved", async () =>
     );
   });
   await withAdr(["mylib"], async (dir) => {
-    assert.deepEqual((await check(dir, git())).uncovered, []);
+    assert.deepEqual((await check(dir, git())).uncovered, [
+      {
+        file: "package.json",
+        names: [],
+        external: ["mylib (github:acme/mylib)"],
+      },
+    ]);
+  });
+});
+
+test("switching an approved name to a non-registry source fails", async () => {
+  await withAdr(["zod"], async (dir) => {
+    const git = fakeGit({
+      changes: [{ status: "M", path: "package.json" }],
+      base: { "package.json": pkg({ zod: "^3" }) },
+      head: { "package.json": pkg({ zod: "github:someone/zod" }) },
+    });
+    assert.deepEqual((await check(dir, git)).uncovered, [
+      {
+        file: "package.json",
+        names: [],
+        external: ["zod (github:someone/zod)"],
+      },
+    ]);
+    const { code, stdout } = await cliRun(dir, git);
+    assert.equal(code, 1);
+    assert.match(stdout, /^ {2}package\.json$/m);
+    assert.match(
+      stdout,
+      /^ {4}zod comes from a non-registry source: github:someone\/zod$/m,
+    );
+    assert.doesNotMatch(stdout, /these names in packages/);
+    assert.match(stdout, /Non-registry sources .* always fail this check/);
   });
 });
 
@@ -233,7 +265,7 @@ test("unparsed manifest changes are warnings and exit 0", async () => {
   });
 });
 
-test("unparsable manifest becomes a warning, not a crash", async () => {
+test("manifest that cannot be parsed at the head fails closed", async () => {
   await withAdr(null, async (dir) => {
     const git = fakeGit({
       changes: [{ status: "M", path: "package.json" }],
@@ -241,9 +273,32 @@ test("unparsable manifest becomes a warning, not a crash", async () => {
       head: { "package.json": "{ not json" },
     });
     const result = await check(dir, git);
-    assert.deepEqual(result.uncovered, []);
-    assert.equal(result.warnings.length, 1);
-    assert.match(result.warnings[0], /package\.json/);
+    assert.deepEqual(result.warnings, []);
+    assert.equal(result.uncovered.length, 1);
+    assert.equal(result.uncovered[0].file, "package.json");
+    assert.deepEqual(result.uncovered[0].names, []);
+    assert.match(result.uncovered[0].note, /could not be parsed/);
+    const { code, stdout } = await cliRun(dir, git);
+    assert.equal(code, 1);
+    assert.match(
+      stdout,
+      /^ {4}could not be parsed .*; confirm its dependencies with an accepted ADR$/m,
+    );
+  });
+});
+
+test("manifest that cannot be parsed at the base counts every name as new", async () => {
+  await withAdr(["zod"], async (dir) => {
+    const git = fakeGit({
+      changes: [{ status: "M", path: "package.json" }],
+      base: { "package.json": "{ not json" },
+      head: { "package.json": pkg({ zod: "1", lodash: "1" }) },
+    });
+    assert.deepEqual(await check(dir, git), {
+      uncovered: [{ file: "package.json", names: ["lodash"] }],
+      warnings: [],
+      problems: [],
+    });
   });
 });
 
