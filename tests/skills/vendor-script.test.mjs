@@ -107,3 +107,18 @@ test("vendor script exits 2 without a project directory", async () => {
     return true;
   });
 });
+
+test("this repository's vendored copy matches core/ and package.json", async () => {
+  const vendored = path.join(repo, ".github", "scripts", "senior-standards");
+  const refresh = "run `node scripts/vendor-dependency-check.mjs .`";
+  for (const file of await filesUnder(path.join(vendored, "core"))) {
+    const copy = await readFile(path.join(vendored, "core", file));
+    const source = await readFile(path.join(repo, "core", file));
+    assert.ok(copy.equals(source), `core/${file} drifted: ${refresh}`);
+  }
+  const { version } = JSON.parse(
+    await readFile(path.join(repo, "package.json"), "utf8"),
+  );
+  const pinned = await readFile(path.join(vendored, "VERSION"), "utf8");
+  assert.equal(pinned.trim(), version, `VERSION is stale: ${refresh}`);
+});
