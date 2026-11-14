@@ -103,9 +103,9 @@ Any other status approves nothing. Internal guard errors also resolve to `ask`.
 
 Shell commands that would bypass the branch rules ask first (never deny):
 
-- `git init` without `-b`/`--initial-branch` when `git config init.defaultBranch` is not `main`;
-- creating a `master` branch (`git init -b master`, `git branch master`, `git checkout -b master`, `git switch -c master`);
-- a direct `git push` to `main` (explicit `main`, `HEAD:main` or `refs/heads/main`, or no refspec while on `main`), and to `dev` when the setup record says Versioned releases is `yes`.
+- `git init` without `-b`/`--initial-branch` when the default branch (`git config init.defaultBranch`, or `-c init.defaultBranch=…` on the command) is not `main`;
+- creating a `master` branch (`git init -b master`, `git branch master`, `git checkout -b master`, `git switch -c master`, or renaming or copying a branch to `master`); renaming `master` away, listing and starting a branch from `master` pass;
+- a direct `git push` to `main` (explicit `main`, `HEAD:main` or `refs/heads/main`, or no refspec while on `main`; `--tags` alone pushes no branch), and to `dev` when the setup record says Versioned releases is `yes`.
 
 Git config and the current branch are read with `git` and a short timeout. If reading the current branch fails, the push check is skipped; if `init.defaultBranch` cannot be read, `git init` without `-b` asks.
 

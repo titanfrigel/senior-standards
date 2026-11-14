@@ -179,3 +179,24 @@ test("a throwing reader is treated as null", async () => {
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("setupReminder asks Git for the top level once", async () => {
+  const dir = await tempDir();
+  try {
+    let calls = 0;
+    const git = {
+      topLevel: async () => {
+        calls += 1;
+        return dir;
+      },
+    };
+    assert.equal(await setupReminder(dir, git), REMINDER);
+    assert.equal(calls, 1);
+    await writeFile(path.join(dir, "AGENTS.md"), RECORD);
+    calls = 0;
+    assert.equal(await setupReminder(dir, git), null);
+    assert.equal(calls, 1);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

@@ -649,6 +649,22 @@ test("guard: a commit with AI attribution prompts with the ai-attribution resour
   });
 });
 
+test("guard: creating a master branch prompts with the branch-hygiene resource", async () => {
+  await withDir(async (dir) => {
+    const { ctx, hooks, calls } = fakeCtx({ directory: dir });
+    await make().setup(ctx);
+    calls.assert = [];
+    ctx.permission.assert = async (req) => {
+      calls.assert.push(req);
+    };
+    await hooks["tool.execute.before"](
+      shellEvent("git branch master", "call_branch"),
+    );
+    assert.equal(calls.assert.length, 1);
+    assert.deepEqual(calls.assert[0].resources, ["branch-hygiene"]);
+  });
+});
+
 test("guard: a plain commit does nothing", async () => {
   await withDir(async (dir) => {
     const { ctx, hooks, calls } = fakeCtx({ directory: dir });

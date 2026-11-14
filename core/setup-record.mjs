@@ -91,8 +91,7 @@ export async function findProjectRoot(dir, git = createGitReader()) {
   return (await topLevelOf(dir, git)) ?? dir;
 }
 
-export async function isProjectDir(dir, git = createGitReader()) {
-  if ((await topLevelOf(dir, git)) !== null) return true;
+async function hasManifest(dir) {
   try {
     const names = await readdir(dir);
     return names.some(
@@ -117,16 +116,25 @@ async function readHead(file) {
   }
 }
 
-export async function readSetupRecord(dir, git = createGitReader()) {
-  const root = await findProjectRoot(dir, git);
+export async function isProjectDir(dir, git = createGitReader()) {
+  return (await topLevelOf(dir, git)) !== null || (await hasManifest(dir));
+}
+
+async function readRecordAt(root) {
   const text = await readHead(path.join(root, "AGENTS.md"));
   if (text === null) return { root, found: false, values: {}, problems: [] };
   return { root, ...parseSetupRecord(text) };
 }
 
+export async function readSetupRecord(dir, git = createGitReader()) {
+  return readRecordAt(await findProjectRoot(dir, git));
+}
+
 export async function setupReminder(dir, git = createGitReader()) {
-  if (!(await isProjectDir(dir, git))) return null;
-  const record = await readSetupRecord(dir, git);
+  // One Git call: the top level answers both "is this a project" and "where".
+  const top = await topLevelOf(dir, git);
+  if (top === null && !(await hasManifest(dir))) return null;
+  const record = await readRecordAt(top ?? dir);
   if (record.found && record.problems.length === 0) return null;
   if (!record.found) return REMINDER;
   return `${REMINDER} Setup record problems: ${record.problems.join("; ")}.`;

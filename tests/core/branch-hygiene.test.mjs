@@ -102,3 +102,55 @@ test("non-git commands yield nothing", async () => {
   assert.deepEqual(await run("npm test"), []);
   assert.deepEqual(await run("echo git push origin main"), []);
 });
+
+test("git branch flags only a new name of master", async () => {
+  for (const cmd of [
+    "git branch -m master main",
+    "git branch -M master main",
+    "git branch --move master main",
+    "git branch -c master copy",
+    "git branch -C master copy",
+    "git branch --copy master copy",
+    "git branch feature master",
+    "git branch --list master",
+    "git branch -l master",
+    "git branch -u origin/main master",
+  ]) {
+    assert.deepEqual(await run(cmd), [], cmd);
+  }
+  for (const cmd of [
+    "git branch -m master",
+    "git branch -m main master",
+    "git branch -c main master",
+    "git branch --copy main master",
+    "git branch master main",
+  ]) {
+    assert.deepEqual(await run(cmd), [MASTER], cmd);
+  }
+});
+
+test("git init reads an attached -b and a global -c init.defaultBranch", async () => {
+  assert.deepEqual(await run("git init -bmain"), []);
+  assert.deepEqual(await run("git -c init.defaultBranch=main init"), []);
+  assert.deepEqual(await run("git -c init.defaultBranch=master init"), [
+    MASTER,
+  ]);
+  assert.deepEqual(
+    await run("git -c init.defaultBranch=master init -b main"),
+    [],
+  );
+});
+
+test("global options before push are skipped", async () => {
+  assert.deepEqual(await run("git -C other push origin main"), [PUSH("main")]);
+});
+
+test("pushing only tags gives no push reason; --follow-tags still does", async () => {
+  const onMain = reader({ currentBranch: "main" });
+  assert.deepEqual(await run("git push --tags", onMain), []);
+  assert.deepEqual(await run("git push origin --tags", onMain), []);
+  assert.deepEqual(await run("git push origin --tags main", onMain), [
+    PUSH("main"),
+  ]);
+  assert.deepEqual(await run("git push --follow-tags", onMain), [PUSH("main")]);
+});
