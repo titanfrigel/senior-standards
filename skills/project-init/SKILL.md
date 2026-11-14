@@ -20,7 +20,7 @@ Nothing is written to disk before the user approves the proposed record. `projec
    4. **Will it be maintained over time? (Renovate dependency updates, dependency audit in CI)**
    5. **Versioned releases? (a `dev` branch with release PRs `dev` → `main`, release tooling, tags, generated release notes)**
 4. **Show what it will do**: the proposed record, then the item list from [What each answer turns on](#what-each-answer-turns-on), grouped as always-on and per-answer. Stop until the user approves.
-5. **Write the record** ([Setup record](#setup-record)) into the root `AGENTS.md`; if the file is missing, create it from the `project-blueprint` template. Commit `chore: record project setup`.
+5. **Write the record** ([Setup record](#setup-record)) into the root `AGENTS.md`; if the file is missing, create it from the `project-blueprint` template. Commit `chore: record project setup`. In a new folder with no Git repository, run `git init -b main` first; in a repository whose `main` is protected, commit the record on a branch (`chore/project-setup`) and open a PR instead of committing to `main`.
 6. **Hand off**: `project-blueprint` (`senior-standards:project-blueprint`) for the docs level, then `repo-standards` (`senior-standards:repo-standards`) in item mode with the always-on and fact-gated item IDs. Each keeps its own approval stops and runs `decision-gate` for every tool (for example the hook manager and the release tool).
 
 End by stating that the setup record now exists in `AGENTS.md` and the reminder no longer applies.

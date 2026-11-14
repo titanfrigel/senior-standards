@@ -111,7 +111,7 @@ Git config and the current branch are read with `git` and a short timeout. If re
 
 ### Dependency check in CI
 
-The guard only binds sessions running the plugin. To make the decision-record rule bind every contributor, `repo-standards` (checklist D6) vendors the same logic into the project and adds a CI job:
+The guard only binds sessions running the plugin. To make the decision-record rule bind every contributor, `repo-standards` (checklist D6) vendors the same manifest parsing into the project (the guard additionally asks before any non-registry source) and adds a CI job:
 
 ```bash
 node scripts/vendor-dependency-check.mjs <projectDir>   # run from the plugin; writes .github/scripts/senior-standards/

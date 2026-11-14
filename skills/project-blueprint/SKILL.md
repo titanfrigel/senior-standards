@@ -15,7 +15,7 @@ Read the setup record first: the `## Project setup` section of the root `AGENTS.
 
 - `full`: run the whole flow below.
 - `basic`: skip steps 2 and 4 (requirements and architecture). Steps 1, 3, 5 and 6 still run: stack decisions and their ADRs, then README, `CONTRIBUTING.md`, `AGENTS.md`, `CLAUDE.md` and the ADR index. Leave out the links to the requirements and architecture documents in `README.md` and `AGENTS.md` (and the README's pointer to the requirements document), and the layer-rules line in `AGENTS.md` and in `CONTRIBUTING.md`.
-- No record: ask the docs question first, in one message: Basic (README, `AGENTS.md`, `CONTRIBUTING.md`, decision records) or Full (Basic plus requirements and architecture documents). Suggest running `project-init` (`senior-standards:project-init`) for the rest of the setup. Write the answer into the record (create the section from the `AGENTS.md` template) only after the user approves it, and commit it with the documents.
+- No record: ask the docs question first, in one message: Basic (README, `AGENTS.md`, `CONTRIBUTING.md`, decision records) or Full (Basic plus requirements and architecture documents). The answer holds for this run only: do not write a partial record. Recommend running `project-init` (`senior-standards:project-init`), which writes the full record.
 
 The record also fills the generated files: the integration branch is `dev` when `Versioned releases` is `yes`, otherwise `main`; the test extent comes from `Tests`; write `SECURITY.md` only when `Public repository` is `yes`, and omit the Security policy link from `README.md` when it is `no`. Keep the `## Project setup` section of `AGENTS.md` intact when filling the template.
 
