@@ -8,6 +8,7 @@ import plugin, {
   isChildSession,
   listSkills,
 } from "../../adapters/opencode/plugin.mjs";
+import { REMINDER } from "../../core/setup-record.mjs";
 
 const quiet = { error() {} };
 const missingSkills = path.join(tmpdir(), "ss-oc-no-such-skills-dir");
@@ -134,6 +135,40 @@ test("context hook pushes standards for a top-level session", async () => {
   assert.equal(event.system[0].type, "text");
   assert.match(event.system[0].text, /senior-standards/);
   assert.match(event.system[0].text, /decision-gate/);
+});
+
+test("context hook reminds without a setup record and stops once one exists", async () => {
+  await withDir(async (dir) => {
+    await writeFile(path.join(dir, "package.json"), "{}");
+    const { ctx, hooks } = fakeCtx({ directory: dir });
+    await make().setup(ctx);
+    const first = { sessionID: "ses_1", system: [] };
+    await hooks["session.context"](first);
+    assert.match(first.system[0].text, /decision-gate/);
+    assert.ok(
+      first.system[0].text.includes(`
+
+${REMINDER}
+</`),
+    );
+    await writeFile(
+      path.join(dir, "AGENTS.md"),
+      [
+        "## Project setup",
+        "<!-- senior-standards:setup v1 -->",
+        "- Docs: basic",
+        "- Tests: standard",
+        "- Public repository: no",
+        "- Maintained over time: no",
+        "- Versioned releases: no",
+        "",
+      ].join("\n"),
+    );
+    const second = { sessionID: "ses_1", system: [] };
+    await hooks["session.context"](second);
+    assert.match(second.system[0].text, /decision-gate/);
+    assert.doesNotMatch(second.system[0].text, /project-init/);
+  });
 });
 
 test("context hook skips child sessions (parentID set)", async () => {

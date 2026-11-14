@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { REMINDER } from "../../core/setup-record.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const script = (name) => path.join(root, "adapters", "claude", name);
@@ -53,6 +54,69 @@ test("session-start emits additionalContext containing decision-gate", () => {
   const out = JSON.parse(run("session-start.mjs", "{}"));
   assert.equal(out.hookSpecificOutput.hookEventName, "SessionStart");
   assert.match(out.hookSpecificOutput.additionalContext, /decision-gate/);
+});
+
+const RECORD = [
+  "# AGENTS",
+  "",
+  "## Project setup",
+  "<!-- senior-standards:setup v1 -->",
+  "- Docs: basic",
+  "- Tests: standard",
+  "- Public repository: no",
+  "- Maintained over time: no",
+  "- Versioned releases: no",
+  "",
+].join("\n");
+
+async function withPlainProject(fn) {
+  const dir = await mkdtemp(path.join(tmpdir(), "ss-claude-setup-"));
+  try {
+    await writeFile(path.join(dir, "package.json"), "{}");
+    await fn(dir);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+const startInput = (cwd) =>
+  JSON.stringify({ hook_event_name: "SessionStart", cwd });
+const noEnvDir = { CLAUDE_PROJECT_DIR: "" };
+const context = (out) => JSON.parse(out).hookSpecificOutput.additionalContext;
+
+test("session-start appends the setup reminder when there is no record", async () => {
+  await withPlainProject(async (dir) => {
+    const ctx = context(run("session-start.mjs", startInput(dir), noEnvDir));
+    assert.match(ctx, /decision-gate/);
+    assert.ok(
+      ctx.endsWith(`
+
+${REMINDER}`),
+    );
+  });
+});
+
+test("session-start omits the reminder when a valid record exists", async () => {
+  await withPlainProject(async (dir) => {
+    await writeFile(path.join(dir, "AGENTS.md"), RECORD);
+    const ctx = context(run("session-start.mjs", startInput(dir), noEnvDir));
+    assert.doesNotMatch(ctx, /project-init/);
+  });
+});
+
+test("session-start: invalid JSON stdin and missing cwd yield standards only", async () => {
+  const bad = context(run("session-start.mjs", "not json", noEnvDir));
+  assert.match(bad, /decision-gate/);
+  assert.doesNotMatch(bad, /project-init/);
+  const missing = context(
+    run(
+      "session-start.mjs",
+      startInput(path.join(tmpdir(), "ss-no-such-dir-xyz")),
+      noEnvDir,
+    ),
+  );
+  assert.match(missing, /decision-gate/);
+  assert.doesNotMatch(missing, /project-init/);
 });
 
 test("pre-tool-use: uncovered pnpm add asks and names the package", async () => {

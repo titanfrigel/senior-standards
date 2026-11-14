@@ -9,6 +9,7 @@ import { parseFrontmatter } from "../../core/adr-index.mjs";
 import { evaluate } from "../../core/evaluate.mjs";
 import { loadStandards } from "../../core/load-standards.mjs";
 import { normalize } from "../../core/normalize.mjs";
+import { setupReminder } from "../../core/setup-record.mjs";
 
 const ID = "senior-standards";
 // Tag wrapping the injected text; also the duplicate check (a bare "senior-standards"
@@ -210,9 +211,11 @@ export function createPlugin({
             return;
           }
           standards ??= loadStandards();
+          const reminder = await setupReminder(ctx.location?.directory);
+          const body = reminder ? `${standards}\n\n${reminder}` : standards;
           system.push({
             type: "text",
-            text: `<${ID}>\n${standards}\n</${ID}>`,
+            text: `<${ID}>\n${body}\n</${ID}>`,
           });
         } catch (error) {
           log(logger, "context hook failed:", error);
