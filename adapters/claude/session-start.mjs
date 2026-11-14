@@ -13,10 +13,13 @@ try {
     import("../../core/setup-record.mjs"),
     import("./io.mjs"),
   ]);
-  const input = await readStdinJson();
+  const input = await readStdinJson().catch(() => null);
   const dir = process.env.CLAUDE_PROJECT_DIR || input?.cwd;
   const reminder = dir ? await setupReminder(dir) : null;
-  if (reminder) context = `${context}\n\n${reminder}`;
+  if (reminder)
+    context = `${context}
+
+${reminder}`;
 } catch {
   // no reminder
 }

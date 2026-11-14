@@ -104,6 +104,19 @@ test("session-start omits the reminder when a valid record exists", async () => 
   });
 });
 
+test("session-start: empty stdin still reminds via CLAUDE_PROJECT_DIR", async () => {
+  await withPlainProject(async (dir) => {
+    const ctx = context(
+      run("session-start.mjs", "", { CLAUDE_PROJECT_DIR: dir }),
+    );
+    assert.ok(
+      ctx.endsWith(`
+
+${REMINDER}`),
+    );
+  });
+});
+
 test("session-start: invalid JSON stdin and missing cwd yield standards only", async () => {
   const bad = context(run("session-start.mjs", "not json", noEnvDir));
   assert.match(bad, /decision-gate/);

@@ -211,7 +211,12 @@ export function createPlugin({
             return;
           }
           standards ??= loadStandards();
-          const reminder = await setupReminder(ctx.location?.directory);
+          let reminder = null;
+          try {
+            reminder = await setupReminder(ctx.location.directory);
+          } catch {
+            // no reminder; the standards are still injected
+          }
           const body = reminder ? `${standards}\n\n${reminder}` : standards;
           system.push({
             type: "text",

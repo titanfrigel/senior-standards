@@ -171,6 +171,17 @@ ${REMINDER}
   });
 });
 
+test("context hook still pushes the standards when the reminder fails", async () => {
+  const { ctx, hooks } = fakeCtx();
+  ctx.location = undefined;
+  await make().setup(ctx);
+  const event = { sessionID: "ses_1", system: [] };
+  await hooks["session.context"](event);
+  assert.equal(event.system.length, 1);
+  assert.match(event.system[0].text, /decision-gate/);
+  assert.doesNotMatch(event.system[0].text, /project-init/);
+});
+
 test("context hook skips child sessions (parentID set)", async () => {
   const { ctx, hooks } = fakeCtx({
     session: { id: "ses_child", parentID: "ses_parent" },
