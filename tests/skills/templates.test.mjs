@@ -43,3 +43,50 @@ test("architecture template has threat model, layer rules and mermaid", async ()
   assert.match(text, /```mermaid[\s\S]*C4Context/);
   assert.match(text, /```mermaid[\s\S]*C4Container/);
 });
+
+test("CONTRIBUTING template reads without the plugin and has the workflow sections", async () => {
+  const text = await read("CONTRIBUTING.md");
+  assert.doesNotMatch(text, /senior-standards/);
+  for (const h of ["Workflow", "Language", "Tests", "Hooks", "Dependencies"]) {
+    assert.match(text, new RegExp(`^## ${h}$`, "m"), h);
+  }
+  assert.match(text, /<type>\/<short-topic>/);
+  assert.match(text, /integration branch/);
+  assert.match(text, /dev.*main/);
+  assert.match(text, /English/);
+  assert.match(text, /accepted ADR/);
+  assert.match(text, /CI/);
+});
+
+test("AGENTS template has a setup record section with fill placeholders", async () => {
+  const text = await read("AGENTS.md");
+  assert.match(text, /^## Project setup$/m);
+  assert.match(text, /<!-- senior-standards:setup v1 -->/);
+  for (const label of [
+    "Goal",
+    "Docs",
+    "Tests",
+    "Public repository",
+    "Maintained over time",
+    "Versioned releases",
+    "Overrides",
+    "Recorded",
+  ]) {
+    assert.match(text, new RegExp(`^- ${label}: <!-- fill`, "m"), label);
+  }
+});
+
+test("project-blueprint skill follows the docs level", async () => {
+  const skill = await readFile(
+    fileURLToPath(
+      new URL("../../skills/project-blueprint/SKILL.md", import.meta.url),
+    ),
+    "utf8",
+  );
+  assert.match(skill, /setup record/);
+  assert.match(skill, /Docs: basic|Docs `basic`/);
+  assert.match(
+    skill,
+    /skip steps 2 and 4|skips? (the )?(requirements|steps 2)/i,
+  );
+});

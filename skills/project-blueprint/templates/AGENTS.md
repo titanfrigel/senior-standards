@@ -2,6 +2,18 @@
 
 <!-- fill: one sentence on what this project is. This file is the single source of project memory for Claude Code and OpenCode. -->
 
+## Project setup
+
+<!-- senior-standards:setup v1 -->
+- Goal: <!-- fill: one or two sentences on the project goal. -->
+- Docs: <!-- fill: basic or full. -->
+- Tests: <!-- fill: light, standard or strict. -->
+- Public repository: <!-- fill: yes or no. -->
+- Maintained over time: <!-- fill: yes or no. -->
+- Versioned releases: <!-- fill: yes or no. -->
+- Overrides: <!-- fill: none, or checklist IDs with a reason. -->
+- Recorded: <!-- fill: date of the last change, YYYY-MM-DD. -->
+
 ## Stack
 
 <!-- fill: language and runtime, framework, data store, hosting; link the ADR for each. -->
