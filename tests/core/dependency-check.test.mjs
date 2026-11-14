@@ -220,6 +220,31 @@ test("non-registry source is uncovered unless its source is approved", async () 
   });
 });
 
+test("ADR source entries are trimmed and unquoted but otherwise exact", async () => {
+  const git = fakeGit({
+    changes: [{ status: "M", path: "package.json" }],
+    base: { "package.json": pkg({}) },
+    head: { "package.json": pkg({ mylib: "github:acme/mylib" }) },
+  });
+  const withAdrText = async (frontmatterPackages, expectedCode) => {
+    const dir = await mkdtemp(path.join(tmpdir(), "ss-depcheck-src-"));
+    try {
+      await mkdir(path.join(dir, "docs", "adr"), { recursive: true });
+      await writeFile(
+        path.join(dir, "docs", "adr", "0001-x.md"),
+        `---\r\nstatus: accepted\r\ndate: 2026-01-01\r\n${frontmatterPackages}---\r\n# x\r\n`,
+      );
+      assert.equal((await cliRun(dir, git)).code, expectedCode);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  };
+  await withAdrText('packages: [ "github:acme/mylib" ]\r\n', 0);
+  await withAdrText("packages:\r\n  -  'github:acme/mylib'  \r\n", 0);
+  await withAdrText("packages: [GitHub:Acme/MyLib]\r\n", 1);
+  await withAdrText("packages: [github:acme/mylib#v2]\r\n", 1);
+});
+
 test("switching an approved name to a non-registry source needs the source approved", async () => {
   const git = () =>
     fakeGit({
