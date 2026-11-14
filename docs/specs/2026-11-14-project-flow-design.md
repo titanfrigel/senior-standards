@@ -233,7 +233,7 @@ Principle: **the plugin decides and generates; the repository enforces.** Everyt
 | Conventional Commit PR titles | CI (V2) | Yes |
 | PR content | `.github/pull_request_template.md` | Yes |
 | Workflow, branches, English, test extent | `CONTRIBUTING.md` and `AGENTS.md` (read by most coding agents) | Yes, as written guidance |
-| New dependencies need a decision record | The plugin's guard, and code review | Only with the plugin today; see proposal P1 |
+| New dependencies need a decision record | The dependency check in CI (§11.1); the plugin's guard as an early warning | Yes |
 
 Rules for generated files:
 - No CI step, script or config may require senior-standards to be installed.
@@ -244,13 +244,48 @@ Rules for generated files:
 
 A new section, "Working with senior-standards", one row per stage: what to say, which skill takes over, what you approve. Example rows: "Start a new project" → `project-init`; "Let's plan <feature>" → `brainstorming` then `writing-plans`; "Go" after a plan → implementation and the chat changelog; "Fix <issue>" → direct fix or back to planning; "Open the PR" → `finishing-a-development-branch`. It says plainly that no slash commands are needed, and how to name a skill explicitly if one does not trigger.
 
-## 11. Proposed additions (each needs the user's yes)
+## 11. Additions (accepted 2026-11-14)
 
-- **P1. Dependency-ADR check in CI.** A small check that fails a PR adding a dependency no accepted ADR lists, so the rule binds collaborators too. Trade-off: the check must run without the plugin installed, so it is either a script copied into the project (zero dependencies, vendored from `core/`) or a published package; vendoring keeps "no plugin needed" but must be updated by hand.
-- **P2. Branch hygiene in the guard.** Ask before `git init` without `-b main` when `init.defaultBranch` is not `main`, and before a direct `git push` to `main`. Low cost; the ruleset already blocks the push on GitHub, so this mainly helps before the remote exists.
-- **P3. Release PR description.** For `Versioned: yes`, a release PR template listing the feature PRs included since the last release.
-- **P4. Evals** for init (questions with effects shown, record written) and the chat changelog.
-- **P5. OpenCode subagents** get the standards too (a v0.1.0 known limitation), so their work follows the record.
+### 11.1 Dependency check in CI
+
+A CI job that fails a PR adding a direct dependency that no accepted ADR lists, so the decision-record rule binds every contributor, not only plugin users.
+
+- **Same logic as the guard.** A build script in this repository, `scripts/build-dependency-check.mjs`, bundles the manifest extractors, the "names added" diff and the ADR index from `core/` into one self-contained file, `dependency-check.mjs`, with a header naming the plugin version it came from. A test asserts the bundle is current, as the ADR index check does.
+- **In the project.** `repo-standards` copies it to `.github/scripts/dependency-check.mjs` and adds a job (always-on item, new checklist ID D6) that runs `node .github/scripts/dependency-check.mjs --base <PR base SHA>`. It uses the Node.js preinstalled on GitHub-hosted runners, so the project needs no Node toolchain and nothing from the plugin.
+- **Behaviour.** For each supported manifest changed between the base and the head, compute the names added; fail with the list of uncovered names and the ADR to write. Manifests that always ask in the guard (the fixed list) produce a warning, not a failure. Removals, version bumps and lockfile-only changes pass.
+- **Updates.** `audit` reports when the project's copy is older than the installed plugin's bundle; `repo-standards` item mode refreshes it.
+
+### 11.2 Branch hygiene in the guard
+
+New guard checks, outcome `ask` like every guard check, never `deny`:
+
+- `git init` without `-b`/`--initial-branch`, when `git config --get init.defaultBranch` is not `main`. Reason: "Initialise with `git init -b main`."
+- `git init -b master`, `git branch master`, `git checkout -b master`, `git switch -c master`. Reason: the default branch is `main`.
+- A direct `git push` to `main` (explicit `main`, `HEAD:main` or `refs/heads/main` refspec, or no refspec while the current branch is `main`), and the same for `dev` when the setup record says Versioned is `yes`. Reason: changes reach `main` through PRs.
+
+Reading Git config and the current branch uses `git` through `node:child_process` with a short timeout, injected into `core` as a reader so `core` stays testable; a failed read skips the check rather than asking.
+
+### 11.3 Release PR template
+
+For Versioned `yes`, `repo-standards` also writes `.github/PULL_REQUEST_TEMPLATE/release.md`: version, highlights, the list of PRs merged into `dev` since the last release, breaking changes, upgrade notes. A standards line tells the agent to open release PRs with that template and to fill the PR list from `git log` between `main` and `dev`.
+
+### 11.4 Evals
+
+New cases in `tests/evals/`, run on demand like the existing ones:
+
+| Case | Checks |
+|---|---|
+| `init-questions` | Empty project, "start a new project": `project-init` fires; all setup questions in one message, each naming what it turns on; nothing written before approval |
+| `init-existing-repo` | Repository with Renovate and `v*` tags but no record: proposes Maintained `yes` and Versioned `yes` |
+| `setup-reminder` | Repository without a record, "plan a login page": mentions `project-init` before planning |
+| `chat-changelog` | Repository with a record and a small bug, "fix it" (Edit granted): the final message has changed, why, files, verification, not done |
+| `question-style` | "Add caching to this API": the questions carry context, described options and a recommendation |
+
+### 11.5 Standards for OpenCode subagents
+
+v0.1.0 injects nothing into OpenCode subagent sessions, to keep their context small. v0.2.0 injects a short subagent version, `core/standards-subagent.md` (about ten lines): English, Conventional Commits, no AI attribution, the test extent from the setup record, `main` and feature branches, and "do not add a dependency; report the need to the parent". Top-level sessions keep the full text.
+
+For Claude Code, the builder checks the current hooks reference: if a subagent start hook can inject context, use the same short text there; otherwise record it as a limitation (the guard already covers subagents' tool calls).
 
 ## 12. Testing
 
@@ -258,7 +293,10 @@ A new section, "Working with senior-standards", one row per stage: what to say, 
 - Adapters: session-start tests with and without a record, with a bad `cwd`, and with a reader error (standards still injected).
 - `tests/skills/format.test.mjs` covers the new skill automatically.
 - A standards test asserting the §6 rules are present.
-- Evals only if P4 is accepted.
+- `core` tests for the branch-hygiene checks (§11.2) with a fake Git reader, including reader failure.
+- A bundle-current test and fixture-based tests for `dependency-check.mjs` (§11.1).
+- OpenCode adapter tests: a child session gets the subagent text, a top-level session the full text.
+- The eval cases in §11.4.
 
 ## 13. Versioning and documents
 
