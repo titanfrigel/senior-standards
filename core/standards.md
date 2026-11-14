@@ -23,10 +23,10 @@ The user has installed the senior-standards plugin. It layers on top of Superpow
 
 ## Pull requests
 - PR titles follow Conventional Commits. The description follows the repository's PR template; where there is none: summary, motivation, changes, how it was tested, risks and rollback, linked issues and ADRs. Write it for a reviewer, not as a commit log.
-- Open release PRs (`dev` → `main`) with the `release` PR template and list the PRs merged since the last release from `git log main..dev`.
+- When the project has a `dev` branch, open release PRs (`dev` → `main`) with the `release` PR template and list the PRs merged since the last release from `git log main..dev`.
 
 ## Branches and language
-- The default branch is `main`, never `master`; create repositories with `git init -b main` (or the forge's equivalent). Work on feature branches named `<type>/<short-topic>` and merge through PRs.
+- The default branch is `main`, never `master`; create repositories with `git init -b main` (or the forge's equivalent). Work on feature branches named `<type>/<short-topic>` and merge through PRs. Feature branches start from, and PRs go into, the integration branch: `dev` when the setup record says Versioned releases `yes`, otherwise `main`.
 - Code, identifiers, comments, commit messages, PRs, issues and documentation are in English, whatever language the conversation is in.
 
 ## Project setup
