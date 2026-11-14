@@ -182,14 +182,30 @@ test("context hook still pushes the standards when the reminder fails", async ()
   assert.doesNotMatch(event.system[0].text, /no project setup record/);
 });
 
-test("context hook skips child sessions (parentID set)", async () => {
+test("context hook gives child sessions the short subagent standards", async () => {
   const { ctx, hooks } = fakeCtx({
     session: { id: "ses_child", parentID: "ses_parent" },
   });
   await make().setup(ctx);
   const event = { sessionID: "ses_child", system: [] };
   await hooks["session.context"](event);
-  assert.equal(event.system.length, 0);
+  assert.equal(event.system.length, 1);
+  const text = event.system[0].text;
+  assert.ok(text.startsWith("<senior-standards>\n"));
+  assert.ok(text.endsWith("\n</senior-standards>"));
+  assert.match(text, /Senior standards \(subagent\)/);
+  assert.doesNotMatch(text, /decision-gate/);
+  assert.doesNotMatch(text, /no project setup record/);
+});
+
+test("context hook gives top-level sessions the full standards", async () => {
+  const { ctx, hooks } = fakeCtx({ session: { id: "ses_top" } });
+  await make().setup(ctx);
+  const event = { sessionID: "ses_top", system: [] };
+  await hooks["session.context"](event);
+  assert.equal(event.system.length, 1);
+  assert.match(event.system[0].text, /decision-gate/);
+  assert.doesNotMatch(event.system[0].text, /Senior standards \(subagent\)/);
 });
 
 test("context hook does not duplicate standards", async () => {

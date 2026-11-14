@@ -56,6 +56,19 @@ test("session-start emits additionalContext containing decision-gate", () => {
   assert.match(out.hookSpecificOutput.additionalContext, /decision-gate/);
 });
 
+test("subagent-start emits the short standards as additionalContext", () => {
+  const out = JSON.parse(run("subagent-start.mjs", "{}"));
+  assert.equal(out.hookSpecificOutput.hookEventName, "SubagentStart");
+  assert.match(
+    out.hookSpecificOutput.additionalContext,
+    /Senior standards \(subagent\)/,
+  );
+  assert.doesNotMatch(
+    out.hookSpecificOutput.additionalContext,
+    /decision-gate/,
+  );
+});
+
 const RECORD = [
   "# AGENTS",
   "",
