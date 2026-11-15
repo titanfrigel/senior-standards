@@ -8,6 +8,7 @@ import plugin, {
   isChildSession,
   listSkills,
 } from "../../adapters/opencode/plugin.mjs";
+import { REMINDER } from "../../core/setup-record.mjs";
 
 const quiet = { error() {} };
 const missingSkills = path.join(tmpdir(), "ss-oc-no-such-skills-dir");
@@ -136,14 +137,75 @@ test("context hook pushes standards for a top-level session", async () => {
   assert.match(event.system[0].text, /decision-gate/);
 });
 
-test("context hook skips child sessions (parentID set)", async () => {
+test("context hook reminds without a setup record and stops once one exists", async () => {
+  await withDir(async (dir) => {
+    await writeFile(path.join(dir, "package.json"), "{}");
+    const { ctx, hooks } = fakeCtx({ directory: dir });
+    await make().setup(ctx);
+    const first = { sessionID: "ses_1", system: [] };
+    await hooks["session.context"](first);
+    assert.match(first.system[0].text, /decision-gate/);
+    assert.ok(
+      first.system[0].text.includes(`
+
+${REMINDER}
+</`),
+    );
+    await writeFile(
+      path.join(dir, "AGENTS.md"),
+      [
+        "## Project setup",
+        "<!-- senior-standards:setup v1 -->",
+        "- Docs: basic",
+        "- Tests: standard",
+        "- Public repository: no",
+        "- Maintained over time: no",
+        "- Versioned releases: no",
+        "",
+      ].join("\n"),
+    );
+    const second = { sessionID: "ses_1", system: [] };
+    await hooks["session.context"](second);
+    assert.match(second.system[0].text, /decision-gate/);
+    assert.doesNotMatch(second.system[0].text, /no project setup record/);
+  });
+});
+
+test("context hook still pushes the standards when the reminder fails", async () => {
+  const { ctx, hooks } = fakeCtx();
+  ctx.location = undefined;
+  await make().setup(ctx);
+  const event = { sessionID: "ses_1", system: [] };
+  await hooks["session.context"](event);
+  assert.equal(event.system.length, 1);
+  assert.match(event.system[0].text, /decision-gate/);
+  assert.doesNotMatch(event.system[0].text, /no project setup record/);
+});
+
+test("context hook gives child sessions the short subagent standards", async () => {
   const { ctx, hooks } = fakeCtx({
     session: { id: "ses_child", parentID: "ses_parent" },
   });
   await make().setup(ctx);
   const event = { sessionID: "ses_child", system: [] };
   await hooks["session.context"](event);
-  assert.equal(event.system.length, 0);
+  assert.equal(event.system.length, 1);
+  const text = event.system[0].text;
+  assert.ok(text.startsWith("<senior-standards>\n"));
+  assert.ok(text.endsWith("\n</senior-standards>"));
+  assert.match(text, /Senior standards \(subagent\)/);
+  assert.doesNotMatch(text, /decision-gate/);
+  assert.doesNotMatch(text, /no project setup record/);
+});
+
+test("context hook gives top-level sessions the full standards", async () => {
+  const { ctx, hooks } = fakeCtx({ session: { id: "ses_top" } });
+  await make().setup(ctx);
+  const event = { sessionID: "ses_top", system: [] };
+  await hooks["session.context"](event);
+  assert.equal(event.system.length, 1);
+  assert.match(event.system[0].text, /decision-gate/);
+  assert.doesNotMatch(event.system[0].text, /Senior standards \(subagent\)/);
 });
 
 test("context hook does not duplicate standards", async () => {
@@ -584,6 +646,22 @@ test("guard: a commit with AI attribution prompts with the ai-attribution resour
     assert.equal(calls.assert.length, 1);
     assert.deepEqual(calls.assert[0].resources, ["ai-attribution"]);
     assert.match(message, /^Commit or PR text contains AI attribution \(/);
+  });
+});
+
+test("guard: creating a master branch prompts with the branch-hygiene resource", async () => {
+  await withDir(async (dir) => {
+    const { ctx, hooks, calls } = fakeCtx({ directory: dir });
+    await make().setup(ctx);
+    calls.assert = [];
+    ctx.permission.assert = async (req) => {
+      calls.assert.push(req);
+    };
+    await hooks["tool.execute.before"](
+      shellEvent("git branch master", "call_branch"),
+    );
+    assert.equal(calls.assert.length, 1);
+    assert.deepEqual(calls.assert[0].resources, ["branch-hygiene"]);
   });
 });
 

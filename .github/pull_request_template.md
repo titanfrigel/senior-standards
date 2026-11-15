@@ -1,15 +1,25 @@
+<!-- Title: a Conventional Commit, for example "feat(api): add pagination". Write for the reviewer; this is not a commit log. -->
+
 ## Summary
 
-<!-- What does this change and why? -->
+<!-- One or two sentences: what this PR does. -->
+
+## Motivation
+
+<!-- Why it is needed: the problem, the user need or the decision behind it. -->
+
+## Changes
+
+<!-- The notable changes, grouped by area. Point the reviewer at what deserves the closest look. -->
+
+## How it was tested
+
+<!-- Tests added or changed, commands run and their results (`pnpm check`), manual checks. Say what was not tested. -->
+
+## Risks and rollback
+
+<!-- What could break, who is affected, and how to undo it (revert, flag, migration back). "Low: docs only" is a valid answer. -->
 
 ## Links
 
-- Spec: <!-- docs/specs/... -->
-- Plan: <!-- docs/plans/... -->
-- ADR: <!-- docs/adr/NNNN-... (required when adding a dependency) -->
-
-## Checklist
-
-- [ ] Docs updated (README, spec, ADRs, CHANGELOG) where behaviour changed
-- [ ] `pnpm check` passes
-- [ ] Conventional Commit messages
+<!-- Issues (Closes #...), spec, plan, ADRs (required when adding a dependency). -->

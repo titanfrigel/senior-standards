@@ -9,6 +9,16 @@ Turns an approved spec into a reviewed documentation set: requirements, architec
 
 Templates: `<plugin root>/skills/project-blueprint/templates/…` — the plugin root is `${CLAUDE_PLUGIN_ROOT}` in Claude Code; in OpenCode it is two directories above this SKILL.md file.
 
+## Setup record and docs level
+
+Read the setup record first: the `## Project setup` section of the root `AGENTS.md` (marker `<!-- senior-standards:setup v1 -->`). Its `Docs` value sets the depth:
+
+- `full`: run the whole flow below.
+- `basic`: skip steps 2 and 4 (requirements and architecture). Steps 1, 3, 5 and 6 still run: stack decisions and their ADRs, then README, `CONTRIBUTING.md`, `AGENTS.md`, `CLAUDE.md` and the ADR index. Leave out the links to the requirements and architecture documents in `README.md` and `AGENTS.md` (and the README's pointer to the requirements document), and the layer-rules line in `AGENTS.md` and in `CONTRIBUTING.md`.
+- No record: ask the docs question first, in one message: Basic (README, `AGENTS.md`, `CONTRIBUTING.md`, decision records) or Full (Basic plus requirements and architecture documents). The answer holds for this run only: do not write a partial record. Recommend running `project-init` (`senior-standards:project-init`), which writes the full record.
+
+The record also fills the generated files: the integration branch is `dev` when `Versioned releases` is `yes`, otherwise `main`; the test extent comes from `Tests`; write `SECURITY.md` only when `Public repository` is `yes`, and omit the Security policy link from `README.md` when it is `no`. Keep the `## Project setup` section of `AGENTS.md` intact when filling the template.
+
 ## Scope
 
 - New project, or a change that adds services, data stores, frameworks or other stack choices: run the full flow.
@@ -19,9 +29,9 @@ Templates: `<plugin root>/skills/project-blueprint/templates/…` — the plugin
 ## Flow
 
 1. **Read the approved spec** in `docs/specs/`, plus the repository state (existing docs, `docs/adr/`). List which target files already exist.
-2. **Requirements.** Draft `docs/product/requirements.md` from `templates/requirements.md`: problem, users, goals, non-goals, functional and non-functional requirements (performance, security, availability, compliance, accessibility where relevant), constraints, success metrics, open questions. Present it and **stop for approval**. On approval, remove the draft-status comment at the top of the file. Resolve open questions with the user now; decisions in step 3 depend on this file.
+2. **Requirements** (skip at Docs `basic`). Draft `docs/product/requirements.md` from `templates/requirements.md`: problem, users, goals, non-goals, functional and non-functional requirements (performance, security, availability, compliance, accessibility where relevant), constraints, success metrics, open questions. Present it and **stop for approval**. On approval, remove the draft-status comment at the top of the file. Resolve open questions with the user now; decisions in step 3 depend on this file.
 3. **Stack decisions.** Derive the list from the spec and the approved requirements (typically language/runtime, framework, data store, authentication, hosting, observability, and anything else the project needs). Show the list to the user. If `docs/adr/` has no ADRs, first write `docs/adr/0001-record-architecture-decisions.md` with `adr` (accepted, `packages: []`, records the decision to keep ADRs in the format `adr` defines; use the `adr` template, never another). Then run `decision-gate` (`senior-standards:decision-gate`) once per decision: research from official sources, compare options, ask, write the ADR via `adr` (`senior-standards:adr`). Decisions tightly coupled (database and ORM) may share one run. Do not install anything here; installation happens later through `official-integration`.
-4. **Architecture.** Choose the architecture style with the user. Compare briefly against the requirements and the stack, recommend one, and ask. Once the user answers, record the style as an ADR through `decision-gate` and `adr` (`packages: []`, unless a layer-enforcement tool is chosen in the same decision):
+4. **Architecture** (skip at Docs `basic`). Choose the architecture style with the user. Compare briefly against the requirements and the stack, recommend one, and ask. Once the user answers, record the style as an ADR through `decision-gate` and `adr` (`packages: []`, unless a layer-enforcement tool is chosen in the same decision):
 
    | Style | Fits when | Cost |
    |---|---|---|
@@ -33,7 +43,7 @@ Templates: `<plugin root>/skills/project-blueprint/templates/…` — the plugin
    Then draft `docs/architecture/overview.md` from `templates/architecture-overview.md`: context and scope (C4 L1), solution strategy, building blocks (C4 L2), runtime view for the key flows, deployment view, cross-cutting concerns, quality goals, a threat model (assets, trust boundaries, top threats, mitigations) and layer rules (allowed dependency directions that CI will enforce). Link the ADRs from step 3 and the architecture-style ADR from the architecture decisions section. Keep Mermaid diagrams valid. Present it and **stop for approval**. On approval, remove the draft-status comment at the top of the file.
 5. **Write the rest.** Only now create the remaining missing files, filled from the approved documents:
    - `docs/adr/README.md`, generated by the `adr` reindex step.
-   - `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, `AGENTS.md`, `CLAUDE.md` from their templates. `AGENTS.md` lists the real stack, the project's `check` entry point and other commands, layout, conventions and project MCP servers. `CLAUDE.md` stays exactly `@AGENTS.md`.
+   - `README.md`, `CONTRIBUTING.md`, `AGENTS.md`, `CLAUDE.md` from their templates, and `SECURITY.md` when the repository is public. `CONTRIBUTING.md` is written for collaborators who never installed this plugin: fill it with plain commands and file paths only, no skill names. `AGENTS.md` lists the real stack, the project's `check` entry point and other commands, layout, conventions and project MCP servers. `CLAUDE.md` stays exactly `@AGENTS.md`.
    - Do not invent commands: where the toolchain is not installed yet, name the intended `check` entry point and mark that `repo-standards` (`senior-standards:repo-standards`) sets it up.
 6. **Commit and hand off.** Search every written file for `<!-- fill` and `%% fill`; none may remain, and neither may a draft-status comment. Then commit as `docs: project blueprint`. Tell the user the documents are in place and hand off to `superpowers:writing-plans`, which plans in `docs/plans/`. The plan should include repository tooling (`repo-standards`), CI enforcement of the layer rules, and installs through `official-integration`.
 

@@ -38,6 +38,6 @@ node scripts/adr-index.mjs
 ## Releasing
 
 1. Move the Unreleased entries in `CHANGELOG.md` under a new `## [X.Y.Z] - date` heading.
-2. Set the same `version` in `package.json` and `.claude-plugin/plugin.json`.
+2. Set the same `version` in `package.json`, `.claude-plugin/plugin.json`, then run `node scripts/vendor-dependency-check.mjs .` so `.github/scripts/senior-standards/VERSION` matches.
 3. Commit `chore(release): X.Y.Z`, then tag `vX.Y.Z`.
 4. Update the `#vX.Y.Z` ref in the README's OpenCode install examples.

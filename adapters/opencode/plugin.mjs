@@ -7,8 +7,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseFrontmatter } from "../../core/adr-index.mjs";
 import { evaluate } from "../../core/evaluate.mjs";
-import { loadStandards } from "../../core/load-standards.mjs";
+import { loadStandards, SUBAGENT_PATH } from "../../core/load-standards.mjs";
 import { normalize } from "../../core/normalize.mjs";
+import { setupReminder } from "../../core/setup-record.mjs";
 
 const ID = "senior-standards";
 // Tag wrapping the injected text; also the duplicate check (a bare "senior-standards"
@@ -175,6 +176,7 @@ export function createPlugin({
     // assert alone resolves as allow without the evaluate hook (ADR 0003).
     let evaluateHooked = false;
     let standards;
+    let subagentStandards;
 
     await guarded("skill registration", async () => {
       const skills = listSkills(skillsDir);
@@ -207,12 +209,24 @@ export function createPlugin({
               event.sessionID,
             ))
           ) {
+            subagentStandards ??= loadStandards(SUBAGENT_PATH);
+            system.push({
+              type: "text",
+              text: `<${ID}>\n${subagentStandards}\n</${ID}>`,
+            });
             return;
           }
           standards ??= loadStandards();
+          let reminder = null;
+          try {
+            reminder = await setupReminder(ctx.location.directory);
+          } catch {
+            // no reminder; the standards are still injected
+          }
+          const body = reminder ? `${standards}\n\n${reminder}` : standards;
           system.push({
             type: "text",
-            text: `<${ID}>\n${standards}\n</${ID}>`,
+            text: `<${ID}>\n${body}\n</${ID}>`,
           });
         } catch (error) {
           log(logger, "context hook failed:", error);

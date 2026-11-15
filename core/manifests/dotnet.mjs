@@ -4,6 +4,7 @@ import {
   newResult,
   parseJsonObject,
   record,
+  stripXmlComments,
 } from "./shared.mjs";
 
 export const id = "dotnet";
@@ -32,7 +33,7 @@ function extractTools(text, fileName) {
 
 export function extract(text, fileName = "project.csproj") {
   if (fileName === "dotnet-tools.json") return extractTools(text, fileName);
-  const xml = text.replace(/<!--[\s\S]*?-->/g, "");
+  const xml = stripXmlComments(text);
   const tags = [...xml.matchAll(REFERENCE_TAG)];
   if (tags.length !== [...xml.matchAll(REFERENCE_OPEN)].length) {
     throw cannotParse(fileName);
