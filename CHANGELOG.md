@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.0] - 2026-11-14
+## [0.2.0] - 2026-11-15
 
 ### Added
 
@@ -26,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `project-blueprint` scales to the docs level: at `basic` it skips requirements and architecture docs, and README links follow the setup record.
 - This repository records its own setup in `AGENTS.md` and runs the dependency check in CI.
+
+### Fixed
+
+- The .NET and Maven extractors strip XML comments until none are left, so a nested comment can no longer leave a commented-out reference visible.
 
 ## [0.1.0] - 2026-10-21
 
