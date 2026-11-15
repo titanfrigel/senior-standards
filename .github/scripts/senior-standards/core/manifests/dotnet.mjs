@@ -13,6 +13,16 @@ const REFERENCE_OPEN = /<(?:PackageReference|PackageVersion)\b/g;
 const REFERENCE_TAG = /<(?:PackageReference|PackageVersion)\b([^>]*)>/g;
 const INCLUDE = /\bInclude\s*=\s*(?:"([^"]*)"|'([^']*)')/;
 
+function stripXmlComments(input) {
+  let previous;
+  let current = input;
+  do {
+    previous = current;
+    current = current.replace(/<!--[\s\S]*?-->/g, "");
+  } while (current !== previous);
+  return current;
+}
+
 export function matches(fileName) {
   return (
     PROJECT_FILE.test(fileName) ||
@@ -32,7 +42,7 @@ function extractTools(text, fileName) {
 
 export function extract(text, fileName = "project.csproj") {
   if (fileName === "dotnet-tools.json") return extractTools(text, fileName);
-  const xml = text.replace(/<!--[\s\S]*?-->/g, "");
+  const xml = stripXmlComments(text);
   const tags = [...xml.matchAll(REFERENCE_TAG)];
   if (tags.length !== [...xml.matchAll(REFERENCE_OPEN)].length) {
     throw cannotParse(fileName);

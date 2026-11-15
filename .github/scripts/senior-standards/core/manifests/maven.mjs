@@ -14,7 +14,12 @@ function child(block, tag) {
 }
 
 export function extract(text, fileName = "pom.xml") {
-  const xml = text.replace(/<!--[\s\S]*?-->/g, "");
+  let xml = text;
+  let previous;
+  do {
+    previous = xml;
+    xml = xml.replace(/<!--[\s\S]*?-->/g, "");
+  } while (xml !== previous);
   const opened = [...xml.matchAll(/<dependency>/g)].length;
   const blocks = [...xml.matchAll(/<dependency>([\s\S]*?)<\/dependency>/g)];
   if (opened !== blocks.length) throw cannotParse(fileName);
