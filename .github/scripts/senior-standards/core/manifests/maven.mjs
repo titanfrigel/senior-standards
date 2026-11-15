@@ -1,4 +1,4 @@
-import { cannotParse, newResult, record } from "./shared.mjs";
+import { cannotParse, newResult, record, stripXmlComments } from "./shared.mjs";
 
 export const id = "maven";
 
@@ -14,12 +14,7 @@ function child(block, tag) {
 }
 
 export function extract(text, fileName = "pom.xml") {
-  let xml = text;
-  let previous;
-  do {
-    previous = xml;
-    xml = xml.replace(/<!--[\s\S]*?-->/g, "");
-  } while (xml !== previous);
+  const xml = stripXmlComments(text);
   const opened = [...xml.matchAll(/<dependency>/g)].length;
   const blocks = [...xml.matchAll(/<dependency>([\s\S]*?)<\/dependency>/g)];
   if (opened !== blocks.length) throw cannotParse(fileName);

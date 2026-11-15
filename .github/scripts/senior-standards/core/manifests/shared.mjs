@@ -68,3 +68,14 @@ export function stripJsonc(text) {
 export function splitLines(text) {
   return text.split(/\r?\n/);
 }
+
+/** Removes XML comments, repeating until none are left so nested ones go too. */
+export function stripXmlComments(text) {
+  let previous;
+  let current = text;
+  do {
+    previous = current;
+    current = current.replace(/<!--[\s\S]*?-->/g, "");
+  } while (current !== previous);
+  return current;
+}

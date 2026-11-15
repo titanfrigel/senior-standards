@@ -4,6 +4,7 @@ import {
   newResult,
   parseJsonObject,
   record,
+  stripXmlComments,
 } from "./shared.mjs";
 
 export const id = "dotnet";
@@ -12,16 +13,6 @@ const PROJECT_FILE = /\.(csproj|fsproj|vbproj)$/;
 const REFERENCE_OPEN = /<(?:PackageReference|PackageVersion)\b/g;
 const REFERENCE_TAG = /<(?:PackageReference|PackageVersion)\b([^>]*)>/g;
 const INCLUDE = /\bInclude\s*=\s*(?:"([^"]*)"|'([^']*)')/;
-
-function stripXmlComments(input) {
-  let previous;
-  let current = input;
-  do {
-    previous = current;
-    current = current.replace(/<!--[\s\S]*?-->/g, "");
-  } while (current !== previous);
-  return current;
-}
 
 export function matches(fileName) {
   return (
